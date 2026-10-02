@@ -288,14 +288,6 @@ export const SequenceStepView: React.FC<SequenceStepViewProps> = ({
               {inspectedStep?.targetAngle}°)
             </span>
           </div>
-
-          <button
-            onClick={onNextStep}
-            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded flex items-center space-x-1 shadow-md transition"
-          >
-            <Play className="w-3.5 h-3.5 ml-0.5" />
-            <span>Start Simulation Animation</span>
-          </button>
         </div>
 
         <div className="flex-1 relative">

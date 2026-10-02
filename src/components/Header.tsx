@@ -81,59 +81,38 @@ export const Header: React.FC<HeaderProps> = ({
         })}
       </nav>
 
-      {/* Right Actions: Phone Connect, Presets, Draw Custom Part, DXF Import */}
-      <div className="flex items-center space-x-1.5 sm:space-x-2">
-        {/* Mobile / Phone Access Modal trigger */}
-        <button
-          onClick={onOpenMobileConnect}
-          className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold text-cyan-300 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700/80 rounded-lg transition shadow-sm animate-pulse"
-          title="Connect phone to simulator via Wi-Fi QR Code"
+      {/* Right Actions: Presets (with Blank Part) & DXF Import */}
+      <div className="flex items-center space-x-2">
+        <select
+          className="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500 hover:bg-slate-750 transition font-medium"
+          onChange={(e) => {
+            if (e.target.value === '__blank__') {
+              onStartBlankPart()
+            } else if (e.target.value) {
+              onLoadPreset(e.target.value)
+            }
+          }}
+          defaultValue="u_channel"
         >
-          <Smartphone className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="hidden sm:inline">Phone Access</span>
-        </button>
-
-        <button
-          onClick={onStartBlankPart}
-          className="hidden lg:flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition shadow-sm"
-          title="Clear canvas and draw a custom part from scratch"
-        >
-          <PenTool className="w-3.5 h-3.5 text-cyan-400" />
-          <span>New Part</span>
-        </button>
-
-        <div className="hidden sm:flex items-center space-x-1">
-          <select
-            className="bg-slate-800/90 text-[11px] text-slate-200 border border-slate-700 rounded-md px-2 py-1.5 focus:outline-none focus:border-cyan-500 hover:bg-slate-800 transition"
-            onChange={(e) => {
-              if (e.target.value) onLoadPreset(e.target.value)
-            }}
-            defaultValue="u_channel"
-          >
+          <optgroup label="Presets">
             {Object.values(SAMPLE_PRESETS).map((p) => (
               <option key={p.key} value={p.key}>
                 {p.name}
               </option>
             ))}
-          </select>
-        </div>
+          </optgroup>
+          <optgroup label="Custom">
+            <option value="__blank__">+ Blank Sheet (Draw New)</option>
+          </optgroup>
+        </select>
 
         <button
           onClick={onOpenDxfModal}
-          className="hidden md:flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
+          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
+          title="Import DXF 2D Profile"
         >
           <FileUp className="w-3.5 h-3.5 text-slate-400" />
-          <span>Import DXF</span>
-        </button>
-
-        <button
-          onClick={onAutoSolve}
-          disabled={isSolving}
-          className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 border border-cyan-400/30 rounded-lg shadow-md shadow-cyan-600/20 transition disabled:opacity-50"
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{isSolving ? 'Solving...' : 'Solve Sequence'}</span>
-          <span className="sm:hidden inline">Solve</span>
+          <span className="hidden sm:inline">Import DXF</span>
         </button>
       </div>
     </header>

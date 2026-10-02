@@ -98,6 +98,22 @@ function evaluateStep(
   }
 }
 
+
+/**
+ * Computes an outside-in preference score for an order (lower = more outside-in).
+ * Standard CNC practice prefers forming outer flanges before inner webs.
+ */
+function getOutsideInScore(order: number[], numBends: number): number {
+  let score = 0
+  for (let i = 0; i < order.length; i++) {
+    const bend = order[i]
+    // Distance from the sheet edges (0 or numBends - 1)
+    const distFromEdge = Math.min(bend, numBends - 1 - bend)
+    score += distFromEdge * (i + 1)
+  }
+  return score
+}
+
 /**
  * Searches and optimizes bend sequences for the given part and tooling setup.
  */
@@ -133,28 +149,49 @@ export function solveBendSequence(
 
   // Indices: [0, 1, ..., N-1]
   const bendIndices = Array.from({ length: numBends }, (_, i) => i)
-  const allOrderPermutations = permute(bendIndices)
+
+  // Generate order permutations; for larger parts, prioritize outside-in heuristics
+  let candidateOrders: number[][]
+  if (numBends <= 6) {
+    candidateOrders = permute(bendIndices).sort(
+      (a, b) => getOutsideInScore(a, numBends) - getOutsideInScore(b, numBends)
+    )
+  } else {
+    // For parts with > 6 bends, test smart heuristic orderings
+    const outsideIn1: number[] = []
+    for (let i = 0; i < Math.ceil(numBends / 2); i++) {
+      outsideIn1.push(i)
+      if (numBends - 1 - i !== i) outsideIn1.push(numBends - 1 - i)
+    }
+    const outsideIn2: number[] = []
+    for (let i = 0; i < Math.ceil(numBends / 2); i++) {
+      outsideIn2.push(numBends - 1 - i)
+      if (numBends - 1 - i !== i) outsideIn2.push(i)
+    }
+    candidateOrders = [
+      outsideIn1,
+      outsideIn2,
+      [...bendIndices],
+      [...bendIndices].reverse(),
+    ]
+  }
 
   const evaluatedSequences: EvaluatedSequence[] = []
 
-  // Test permutations
-  for (let permIdx = 0; permIdx < allOrderPermutations.length; permIdx++) {
-    const order = allOrderPermutations[permIdx]
-
-    // For this order, find best orientation combination (Forward vs Reverse)
-    // Try to minimize flips: prefer maintaining orientation from step to step
+  // Helper to simulate a given bend order starting with an initial orientation
+  function evaluateBranch(order: number[], startOrientation: 'FORWARD' | 'REVERSE') {
     const steps: EvaluatedStep[] = []
     const completedBends = new Map<number, number>()
-    let currentOrientation: 'FORWARD' | 'REVERSE' = 'FORWARD'
+    let currentOrientation = startOrientation
     let flips = 0
     let permHasCollision = false
-    const permSuggestions: Suggestion[] = []
+    const branchSuggestions: Suggestion[] = []
 
     for (let stepIdx = 0; stepIdx < order.length; stepIdx++) {
       const bendIdx = order[stepIdx]
 
-      // 1. Try keeping current orientation first
-      let stepResult = evaluateStep(
+      // Evaluate both keeping orientation vs flipping
+      const sameResult = evaluateStep(
         part,
         stepIdx,
         bendIdx,
@@ -165,8 +202,13 @@ export function solveBendSequence(
         envelope
       )
 
-      // 2. If it collides, check if flipping 180° resolves it!
-      if (stepResult.collisionResult.hasCollision) {
+      let chosenStep: EvaluatedStep
+
+      if (!sameResult.collisionResult.hasCollision) {
+        // Preferred: no collision and no flip required
+        chosenStep = sameResult
+      } else {
+        // Try opposite orientation
         const altOrientation: 'FORWARD' | 'REVERSE' =
           currentOrientation === 'FORWARD' ? 'REVERSE' : 'FORWARD'
         const altResult = evaluateStep(
@@ -181,43 +223,93 @@ export function solveBendSequence(
         )
 
         if (!altResult.collisionResult.hasCollision) {
-          // Resolved by flipping!
-          stepResult = altResult
+          // Solved by flipping!
+          chosenStep = altResult
           currentOrientation = altOrientation
           flips++
         } else {
-          // Both orientations collide on this step
+          // Both orientations have collisions: pick the one with lower collision severity
           permHasCollision = true
+          const sevSame = sameResult.collisionResult.collisionPoints.reduce(
+            (sum: number, c) => sum + c.penetrationDepth,
+            0
+          )
+          const sevAlt = altResult.collisionResult.collisionPoints.reduce(
+            (sum: number, c) => sum + c.penetrationDepth,
+            0
+          )
+
+          if (sevAlt < sevSame) {
+            chosenStep = altResult
+            currentOrientation = altOrientation
+            flips++
+          } else {
+            chosenStep = sameResult
+          }
+
           const { suggestions } = generateStepDiagnostics(
             part,
             stepIdx,
             bendIdx,
             currentOrientation,
-            stepResult.collisionResult,
+            chosenStep.collisionResult,
             punch,
             die,
             envelope
           )
-          permSuggestions.push(...suggestions)
+          branchSuggestions.push(...suggestions)
         }
       }
 
-      steps.push(stepResult)
+      steps.push(chosenStep)
       completedBends.set(bendIdx, part.bends[bendIdx].angle)
     }
 
-    const isValid = !permHasCollision
-    const score = flips * 10 + (isValid ? 0 : 1000)
+    const collisionStepCount = steps.filter((s) => s.collisionResult.hasCollision).length
+    const totalCollisions = steps.reduce(
+      (sum: number, s) => sum + s.collisionResult.collisionPoints.length,
+      0
+    )
+    const isValid = collisionStepCount === 0
+    const score = collisionStepCount * 10000 + totalCollisions * 100 + flips * 10
 
-    evaluatedSequences.push({
-      id: `seq-${permIdx}`,
+    return {
       isValid,
       steps,
       flipCount: flips,
       score,
+      collisionStepCount,
       primaryFailureReason: permHasCollision ? 'Tool or Machine Collision' : undefined,
-      suggestions: permSuggestions,
+      suggestions: branchSuggestions,
+    }
+  }
+
+  // Test permutations across both starting orientations
+  for (let permIdx = 0; permIdx < candidateOrders.length; permIdx++) {
+    const order = candidateOrders[permIdx]
+
+    // Branch A: start FORWARD
+    const branchA = evaluateBranch(order, 'FORWARD')
+    // Branch B: start REVERSE
+    const branchB = evaluateBranch(order, 'REVERSE')
+
+    // Pick best branch for this order
+    const bestBranch = branchA.score <= branchB.score ? branchA : branchB
+
+    evaluatedSequences.push({
+      id: `seq-${permIdx}`,
+      isValid: bestBranch.isValid,
+      steps: bestBranch.steps,
+      flipCount: bestBranch.flipCount,
+      score: bestBranch.score,
+      primaryFailureReason: bestBranch.primaryFailureReason,
+      suggestions: bestBranch.suggestions,
     })
+
+    // If we found a perfect valid sequence with 0 flips, we can stop early
+    if (bestBranch.isValid && bestBranch.flipCount === 0) {
+      break
+    }
   }
 
   // Separate valid vs failed

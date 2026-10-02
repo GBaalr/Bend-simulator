@@ -70,15 +70,18 @@ export function buildMachineObstacles(
     { x: -bedW / 2, y: dieBottom },
   ]
 
-  // 6. Backgauge Finger at (gaugeX, gaugeR)
-  // Backgauge finger body extends behind gaugeX into +X direction
+  // 6. Backgauge Finger at (gaugeX, gaugeR) with CNC X-retract
+  // On real CNC press brakes, the backgauge automatically retracts 30-50mm in +X
+  // once the sheet is pinched, to avoid colliding with the upward-swinging flange.
+  const retractX = Math.min(50, currentStrokeProgress * 80)
+  const effectiveGaugeX = gaugeX + retractX
   const fW = 35
   const fH = 40
   const gaugePoly: Point2D[] = [
-    { x: gaugeX, y: gaugeR - 5 },
-    { x: gaugeX + fW, y: gaugeR - 5 },
-    { x: gaugeX + fW, y: gaugeR + fH },
-    { x: gaugeX, y: gaugeR + fH },
+    { x: effectiveGaugeX, y: gaugeR - 5 },
+    { x: effectiveGaugeX + fW, y: gaugeR - 5 },
+    { x: effectiveGaugeX + fW, y: gaugeR + fH },
+    { x: effectiveGaugeX, y: gaugeR + fH },
   ]
 
   return {
@@ -128,20 +131,58 @@ export function checkInstantCollision(
   )
 
   const collisionPoints: CollisionPoint[] = []
+  const activeBend = part.bends[activeBendIndex]
+  const targetAngle = activeBend ? activeBend.angle : 90
+  const currentPunchY = -penetrationDepth * progress
 
   // Check each part segment polygon against all obstacle polygons
   for (const seg of kinState.segments) {
+    const isAdjacentToActiveBend =
+      seg.flangeIndex === activeBendIndex || seg.flangeIndex === activeBendIndex + 1
+
     // 1. Check Punch
-    const punchHit = checkPolygonCollision(seg.polygon, obstacles.punchPoly)
-    if (punchHit.hasCollision) {
-      collisionPoints.push({
-        x: punchHit.intersectionPoint?.x ?? seg.p2.x,
-        y: punchHit.intersectionPoint?.y ?? seg.p2.y,
-        flangeIndex: seg.flangeIndex,
-        entity: 'PUNCH',
-        penetrationDepth: punchHit.penetrationDepth ?? 5,
-        atAngleProgress: progress,
-      })
+    // Legitimate forming: at the active bend apex, the sheet inner corner is pressed by the punch tip.
+    // Real punch collision occurs if:
+    // a) targetAngle < punch.angle - 0.5 (sheet sharper than punch included angle)
+    // b) For active flanges: sheet gouges into punch body/throat above the nose (y > currentPunchY + 12)
+    // c) For non-active flanges: ANY contact with punch is a true collision!
+    if (isAdjacentToActiveBend) {
+      if (targetAngle < punch.angle - 0.5) {
+        // Punch included angle is too wide for this bend angle
+        collisionPoints.push({
+          x: seg.p1.x,
+          y: seg.p1.y,
+          flangeIndex: seg.flangeIndex,
+          entity: 'PUNCH',
+          penetrationDepth: 5,
+          atAngleProgress: progress,
+        })
+      } else {
+        const punchHit = checkPolygonCollision(seg.polygon, obstacles.punchPoly)
+        if (punchHit.hasCollision && (punchHit.intersectionPoint?.y ?? 0) > currentPunchY + 12) {
+          collisionPoints.push({
+            x: punchHit.intersectionPoint?.x ?? seg.p2.x,
+            y: punchHit.intersectionPoint?.y ?? seg.p2.y,
+            flangeIndex: seg.flangeIndex,
+            entity: 'PUNCH',
+            penetrationDepth: punchHit.penetrationDepth ?? 5,
+            atAngleProgress: progress,
+          })
+        }
+      }
+    } else {
+      // Non-active flange (e.g. return flange or prior bend swinging into punch)
+      const punchHit = checkPolygonCollision(seg.polygon, obstacles.punchPoly)
+      if (punchHit.hasCollision) {
+        collisionPoints.push({
+          x: punchHit.intersectionPoint?.x ?? seg.p2.x,
+          y: punchHit.intersectionPoint?.y ?? seg.p2.y,
+          flangeIndex: seg.flangeIndex,
+          entity: 'PUNCH',
+          penetrationDepth: punchHit.penetrationDepth ?? 5,
+          atAngleProgress: progress,
+        })
+      }
     }
 
     // 2. Check Punch Holder
@@ -175,9 +216,6 @@ export function checkInstantCollision(
     // solid die shoulders outside [-V/2, +V/2] or non-active return flanges swinging into the die count as collisions.
     const halfV = die.vOpening / 2
     const dieTopY = -part.thickness
-
-    // Active flanges connected to the bend apex
-    const isAdjacentToActiveBend = seg.flangeIndex === activeBendIndex || seg.flangeIndex === activeBendIndex + 1
 
     if (isAdjacentToActiveBend) {
       // For the active forming flanges, only check if they gouge into the outer flat die shoulders (outside the V span)
@@ -223,8 +261,7 @@ export function checkInstantCollision(
       })
     }
 
-    // 6. Check Backgauge (except at the designated contact stop)
-    // If a flange collides with gauge during swing
+    // 6. Check Backgauge (with automatic X-retraction active)
     if (progress > 0.05) {
       const gaugeHit = checkPolygonCollision(seg.polygon, obstacles.gaugePoly)
       if (gaugeHit.hasCollision) {

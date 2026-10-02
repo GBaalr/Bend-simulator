@@ -11,87 +11,129 @@ import { Punch, Die, MachineEnvelope, Point2D } from '../types/tooling'
 
 export function generatePunchPolygon(punch: Punch): Point2D[] {
   const halfAngleRad = ((punch.angle / 2) * Math.PI) / 180
-  const tipRadius = punch.tipRadius
+  const tipRadius = punch.tipRadius || 0.8
+  const h = punch.height || 105
+  const shankHalfWidth = (punch.shankWidth || 13) / 2 // 6.5 mm standard European tang
+  const tangBottomY = h - 20 // 20mm standard clamping tang height
+
+  // Promecam / European Standard Clamping Tang with Anti-Fall Safety Groove (8.4mm neck)
+  const tangRight: Point2D[] = [
+    { x: shankHalfWidth, y: tangBottomY },
+    { x: shankHalfWidth, y: h - 14 },
+    { x: 4.2, y: h - 12 },
+    { x: 4.2, y: h - 8 },
+    { x: shankHalfWidth, y: h - 6 },
+    { x: shankHalfWidth, y: h },
+  ]
+  const tangLeft: Point2D[] = [
+    { x: -shankHalfWidth, y: h },
+    { x: -shankHalfWidth, y: h - 6 },
+    { x: -4.2, y: h - 8 },
+    { x: -4.2, y: h - 12 },
+    { x: -shankHalfWidth, y: h - 14 },
+    { x: -shankHalfWidth, y: tangBottomY },
+  ]
 
   if (punch.type === 'straight') {
-    // Standard European Straight Punch
-    const slopeHeight = 35
-    const slopeHalfWidth = slopeHeight * Math.tan(halfAngleRad) + tipRadius
-    const bodyHalfWidth = Math.max(slopeHalfWidth, 14)
-    const shankHalfWidth = punch.shankWidth / 2 // 6.5mm
-    const h = punch.height
+    // European Standard Straight Punch (e.g. Rolleri 10.126 / P-105.88)
+    // Symmetrical 24mm thick body (half-width 12mm), slender nose tapering at halfAngle
+    const bodyHalfWidth = 12.0
+    const taperH = Math.min(18, Math.max(8, (bodyHalfWidth - tipRadius) / Math.tan(halfAngleRad)))
+    const taperW = taperH * Math.tan(halfAngleRad) + tipRadius
 
     return [
-      { x: 0, y: 0 }, // Tip
-      { x: slopeHalfWidth, y: slopeHeight },
-      { x: bodyHalfWidth, y: slopeHeight + 20 },
-      { x: shankHalfWidth, y: h - 25 },
-      { x: shankHalfWidth, y: h },
-      { x: -shankHalfWidth, y: h },
-      { x: -shankHalfWidth, y: h - 25 },
-      { x: -bodyHalfWidth, y: slopeHeight + 20 },
-      { x: -slopeHalfWidth, y: slopeHeight },
+      { x: 0, y: 0 }, // Tip at (0,0)
+      { x: taperW, y: taperH }, // Right nose taper
+      { x: bodyHalfWidth, y: taperH + 4 }, // Transition to body
+      { x: bodyHalfWidth, y: tangBottomY }, // Shoulder right
+      ...tangRight,
+      ...tangLeft,
+      { x: -bodyHalfWidth, y: tangBottomY }, // Shoulder left
+      { x: -bodyHalfWidth, y: taperH + 4 }, // Transition left
+      { x: -taperW, y: taperH }, // Left nose taper
     ]
   }
 
   if (punch.type === 'gooseneck') {
-    // Gooseneck with deep throat relief for return flanges
-    // Relief is positioned on the front side (negative X) or rear side.
-    // Standard European gooseneck relief opens to the front (-X)
+    // Standard European Swan-Neck Gooseneck Punch (e.g. Promecam 10.110 / Rolleri P.130.88 / P-120.88)
+    // Deep throat clearance pocket on the front (-X) for return flanges and box shapes
     const reliefDepth = punch.throatRelief || 55
-    const reliefH = punch.throatHeight || 60
-    const h = punch.height
-    const shankHalf = punch.shankWidth / 2
+    const reliefH = punch.throatHeight || 55
+    const bodyRearWidth = 12.0
+
+    // Nose taper at tip
+    const noseH = 8
+    const noseRightW = noseH * Math.tan(halfAngleRad) + tipRadius
+    const noseLeftW = noseH * Math.tan(halfAngleRad) + tipRadius
+
+    // Rear face (+X towards backgauge): solid structural contour
+    const rearPts: Point2D[] = [
+      { x: noseRightW, y: noseH },
+      { x: bodyRearWidth - 3, y: 25 },
+      { x: bodyRearWidth, y: 60 },
+      { x: bodyRearWidth + 1, y: tangBottomY },
+    ]
+
+    // Front throat curve (-X towards operator): authentic smooth C-shaped pocket
+    const frontPts: Point2D[] = [
+      { x: -bodyRearWidth, y: tangBottomY }, // Shoulder left
+      { x: -16, y: Math.min(tangBottomY - 6, reliefH + 32) },
+      { x: -reliefDepth * 0.55, y: reliefH + 24 }, // Upper curve
+      { x: -reliefDepth * 0.85, y: reliefH + 14 },
+      { x: -reliefDepth, y: reliefH }, // Deepest throat point
+      { x: -reliefDepth * 0.95, y: reliefH - 12 },
+      { x: -reliefDepth * 0.70, y: Math.max(noseH + 12, reliefH - 24) }, // Lower curve
+      { x: -reliefDepth * 0.40, y: noseH + 8 },
+      { x: -noseLeftW - 3, y: noseH + 3 },
+      { x: -noseLeftW, y: noseH }, // Left nose taper
+    ]
 
     return [
       { x: 0, y: 0 }, // Tip
-      { x: 12, y: 25 },
-      { x: 16, y: 45 },
-      { x: 16, y: h - 30 },
-      { x: shankHalf, y: h - 15 },
-      { x: shankHalf, y: h },
-      { x: -shankHalf, y: h },
-      { x: -shankHalf, y: h - 20 },
-      // The Gooseneck Pocket:
-      { x: -12, y: reliefH + 20 },
-      { x: -(reliefDepth + 10), y: reliefH + 10 },
-      { x: -reliefDepth, y: 25 },
-      { x: -10, y: 15 },
+      ...rearPts,
+      ...tangRight,
+      ...tangLeft,
+      ...frontPts,
     ]
   }
 
   if (punch.type === 'acute') {
-    // 30° Acute punch
-    const slopeH = 45
-    const slopeW = slopeH * Math.tan(halfAngleRad) + tipRadius
-    const h = punch.height
-    const shankHalf = punch.shankWidth / 2
+    // 30° Acute air-bending punch (e.g. Promecam 10.108 / 10.109 / P-105.30)
+    // Slender nose extending ~35mm up before widening to standard body
+    const bodyHalfWidth = 12.5
+    const acuteNoseH = Math.min(42, Math.max(25, ((bodyHalfWidth - tipRadius) / Math.tan(halfAngleRad)) * 0.9))
+    const noseW = acuteNoseH * Math.tan(halfAngleRad) + tipRadius
 
     return [
       { x: 0, y: 0 },
-      { x: slopeW, y: slopeH },
-      { x: 14, y: slopeH + 15 },
-      { x: shankHalf, y: h - 20 },
-      { x: shankHalf, y: h },
-      { x: -shankHalf, y: h },
-      { x: -shankHalf, y: h - 20 },
-      { x: -14, y: slopeH + 15 },
-      { x: -slopeW, y: slopeH },
+      { x: noseW, y: acuteNoseH },
+      { x: bodyHalfWidth, y: acuteNoseH + 8 },
+      { x: bodyHalfWidth, y: tangBottomY },
+      ...tangRight,
+      ...tangLeft,
+      { x: -bodyHalfWidth, y: tangBottomY },
+      { x: -bodyHalfWidth, y: acuteNoseH + 8 },
+      { x: -noseW, y: acuteNoseH },
     ]
   }
 
-  // Default / Sash punch
-  const slopeH = 30
-  const slopeW = slopeH * Math.tan(halfAngleRad)
-  const h = punch.height
+  // Sash / Sword Punch (e.g. 10.120 / P-105.86, 86° narrow profile punch)
+  const bodyHalfWidth = 8.5
+  const taperH = Math.min(14, (bodyHalfWidth - tipRadius) / Math.tan(halfAngleRad))
+  const taperW = taperH * Math.tan(halfAngleRad) + tipRadius
+
   return [
     { x: 0, y: 0 },
-    { x: slopeW, y: slopeH },
-    { x: 10, y: slopeH + 30 },
-    { x: 6.5, y: h },
-    { x: -6.5, y: h },
-    { x: -10, y: slopeH + 30 },
-    { x: -slopeW, y: slopeH },
+    { x: taperW, y: taperH },
+    { x: bodyHalfWidth, y: taperH + 5 },
+    { x: bodyHalfWidth, y: tangBottomY - 12 },
+    { x: 12, y: tangBottomY },
+    ...tangRight,
+    ...tangLeft,
+    { x: -12, y: tangBottomY },
+    { x: -bodyHalfWidth, y: tangBottomY - 12 },
+    { x: -bodyHalfWidth, y: taperH + 5 },
+    { x: -taperW, y: taperH },
   ]
 }
 
