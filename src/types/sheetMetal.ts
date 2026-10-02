@@ -39,4 +39,6 @@ export interface BendCalculation {
   totalTonnage: number  // kN (and Metric Tonnes)
   minFlangeLength: number // mm
   recommendedV: number  // mm
+  springbackDeg?: number // predicted elastic recovery angle
+  overbendAngle?: number // target press angle compensated for springback
 }

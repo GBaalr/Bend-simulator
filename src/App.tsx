@@ -6,6 +6,7 @@ import { SequenceStepView } from './components/SequenceStepView'
 import { SimulationStepView } from './components/SimulationStepView'
 import { DxfImportModal } from './components/DxfImportModal'
 import { MobileConnectModal } from './components/MobileConnectModal'
+import { SetupSheetModal } from './components/SetupSheetModal'
 
 import { SheetMetalPart, Material } from './types/sheetMetal'
 import { Punch, Die, MachineEnvelope } from './types/tooling'
@@ -46,6 +47,7 @@ export function App() {
   const [isDxfModalOpen, setIsDxfModalOpen] = useState(false)
   const [isSolving, setIsSolving] = useState(false)
   const [isMobileConnectOpen, setIsMobileConnectOpen] = useState(false)
+  const [isSetupSheetOpen, setIsSetupSheetOpen] = useState(false)
 
   const elapsedMsRef = useRef<number>(0)
   const lastTimeRef = useRef<number | null>(null)
@@ -207,6 +209,7 @@ export function App() {
         }}
         onOpenDxfModal={() => setIsDxfModalOpen(true)}
         onOpenMobileConnect={() => setIsMobileConnectOpen(true)}
+        onOpenSetupSheet={() => setIsSetupSheetOpen(true)}
         onAutoSolve={() => {
           setIsSolving(true)
           setTimeout(() => {
@@ -270,6 +273,8 @@ export function App() {
         {currentWorkflowStep === 'SIMULATION' && (
           <SimulationStepView
             part={part}
+            material={material}
+            metrics={metrics}
             punch={punch}
             die={die}
             envelope={envelope}
@@ -281,6 +286,7 @@ export function App() {
             onSelectStep={handleSelectStep}
             onTogglePlay={handleTogglePlay}
             onProgressChange={handleProgressChange}
+            onOpenSetupSheet={() => setIsSetupSheetOpen(true)}
             onToggleOrientation={() => {
               if (activeSequence && activeSequence.steps[activeStepIndex]) {
                 const cur = activeSequence.steps[activeStepIndex].orientation
@@ -322,6 +328,20 @@ export function App() {
         isOpen={isMobileConnectOpen}
         onClose={() => setIsMobileConnectOpen(false)}
         localIp="192.168.1.69"
+      />
+
+      {/* Shop-Floor Setup Sheet & Test Report Modal */}
+      <SetupSheetModal
+        isOpen={isSetupSheetOpen}
+        onClose={() => setIsSetupSheetOpen(false)}
+        part={part}
+        material={material}
+        punch={punch}
+        die={die}
+        envelope={envelope}
+        metrics={metrics}
+        sequence={activeSequence}
+        delemProgram={delemProgram}
       />
     </div>
   )

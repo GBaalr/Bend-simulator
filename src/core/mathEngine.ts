@@ -161,6 +161,35 @@ export function calculatePenetrationDepth(
 }
 
 /**
+ * Calculates elastic springback (recovery angle Δθ) and compensated overbend target.
+ * Standard air bending formula based on yield strength Re, Young's Modulus E, inside radius Ri, and thickness T.
+ */
+export function calculateSpringback(
+  targetAngleDeg: number,
+  insideRadius: number,
+  thickness: number,
+  material: Material
+): { springbackDeg: number; overbendAngleDeg: number } {
+  let E = 210000 // Mild steel modulus (MPa)
+  const matId = material.id.toLowerCase()
+  if (matId.includes('aluminum')) E = 70000
+  else if (matId.includes('stainless')) E = 200000
+  else if (matId.includes('copper')) E = 110000
+
+  const yieldStrength = material.yieldStrength || 235
+  const Ri = Math.max(0.5, insideRadius)
+  const T = Math.max(0.5, thickness)
+  const turnAngle = Math.max(1, 180 - targetAngleDeg)
+
+  // Standard air-bend springback model: Δθ = turnAngle * 3.6 * (Re / E) * sqrt(Ri / T)
+  const rawSpringback = Math.max(0.4, Math.min(8.0, (turnAngle * 3.6 * yieldStrength * Math.sqrt(Ri / T)) / E))
+  const springbackDeg = Math.round(rawSpringback * 10) / 10
+  const overbendAngleDeg = Math.round((targetAngleDeg - springbackDeg) * 10) / 10
+
+  return { springbackDeg, overbendAngleDeg }
+}
+
+/**
  * Comprehensive part calculations
  */
 export function calculatePartMetrics(
@@ -175,15 +204,23 @@ export function calculatePartMetrics(
 
   let totalBD = 0
   let avgK = 0
+  let avgSpringback = 0
+  let avgOverbend = 0
 
   part.bends.forEach((bend) => {
     const k = bend.kFactor ?? calculateKFactor(bend.radius, part.thickness)
     avgK += k
     const bd = calculateBendDeduction(bend.angle, bend.radius, part.thickness, k)
     totalBD += bd
+
+    const sb = calculateSpringback(bend.angle, bend.radius, part.thickness, material)
+    avgSpringback += sb.springbackDeg
+    avgOverbend += sb.overbendAngleDeg
   })
 
   avgK = part.bends.length > 0 ? avgK / part.bends.length : material.defaultKFactor
+  const springbackVal = part.bends.length > 0 ? Math.round((avgSpringback / part.bends.length) * 10) / 10 : 1.5
+  const overbendVal = part.bends.length > 0 ? Math.round((avgOverbend / part.bends.length) * 10) / 10 : 88.5
 
   const sumFlanges = part.flanges.reduce((acc, f) => acc + f.length, 0)
   const flatLength = Math.max(0, Math.round((sumFlanges - totalBD) * 100) / 100)
@@ -198,5 +235,7 @@ export function calculatePartMetrics(
     totalTonnage: tonnage.totalTonnes,
     minFlangeLength: minFlange,
     recommendedV: recV,
+    springbackDeg: springbackVal,
+    overbendAngle: overbendVal,
   }
 }

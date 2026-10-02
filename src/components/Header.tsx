@@ -1,5 +1,5 @@
 import React from 'react'
-import { Cpu, FileUp, Sparkles, PenTool, Wrench, ListOrdered, PlayCircle, Smartphone } from 'lucide-react'
+import { Cpu, FileUp, Sparkles, PenTool, Wrench, ListOrdered, PlayCircle, Smartphone, FileText } from 'lucide-react'
 
 export type WorkflowStepId = 'SKETCH' | 'TOOLING' | 'SEQUENCE' | 'SIMULATION'
 
@@ -12,6 +12,7 @@ interface HeaderProps {
   onOpenMobileConnect: () => void
   onAutoSolve: () => void
   isSolving: boolean
+  onOpenSetupSheet?: () => void
 }
 
 import { SAMPLE_PRESETS } from '../core/presets'
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMobileConnect,
   onAutoSolve,
   isSolving,
+  onOpenSetupSheet,
 }) => {
   const steps: {
     id: WorkflowStepId
@@ -114,6 +116,17 @@ export const Header: React.FC<HeaderProps> = ({
           <FileUp className="w-3.5 h-3.5 text-slate-400" />
           <span className="hidden sm:inline">Import DXF</span>
         </button>
+
+        {onOpenSetupSheet && (
+          <button
+            onClick={onOpenSetupSheet}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-300 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800/80 rounded-lg transition shadow-sm"
+            title="Open Shop-Floor Setup Sheet & Test Report"
+          >
+            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">Setup Sheet</span>
+          </button>
+        )}
       </div>
     </header>
   )

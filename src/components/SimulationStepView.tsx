@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Play,
   Pause,
@@ -12,17 +12,23 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  FileText,
+  Volume2,
+  VolumeX,
 } from 'lucide-react'
 import { EvaluatedSequence, EvaluatedStep } from '../types/simulation'
-import { SheetMetalPart } from '../types/sheetMetal'
+import { SheetMetalPart, Material, BendCalculation } from '../types/sheetMetal'
 import { Punch, Die, MachineEnvelope } from '../types/tooling'
 import { DelemPartProgram } from '../types/delem'
 import { Viewport2D } from './Viewport2D'
 import { Viewport3D } from './Viewport3D'
 import { DelemTable } from './DelemTable'
+import { soundEngine } from '../core/soundEngine'
 
 interface SimulationStepViewProps {
   part: SheetMetalPart
+  material?: Material
+  metrics?: BendCalculation
   punch: Punch
   die: Die
   envelope: MachineEnvelope
@@ -37,6 +43,7 @@ interface SimulationStepViewProps {
   onToggleOrientation: () => void
   onPrevStep: () => void
   onBackToSketch: () => void
+  onOpenSetupSheet?: () => void
   // Continuous Motion & Handling Props
   punchYOverride?: number
   sheetTransform?: { x: number; y: number; rotationX?: number; rotationY?: number }
@@ -51,6 +58,8 @@ interface SimulationStepViewProps {
 
 export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
   part,
+  material,
+  metrics,
   punch,
   die,
   envelope,
@@ -65,6 +74,7 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
   onToggleOrientation,
   onPrevStep,
   onBackToSketch,
+  onOpenSetupSheet,
   punchYOverride,
   sheetTransform,
   gaugeOverride,
@@ -77,6 +87,30 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'2D' | '3D' | 'SPLIT'>('3D')
   const [showDelemTable, setShowDelemTable] = useState(false)
+  const [isMuted, setIsMuted] = useState(soundEngine.getMuted())
+
+  // Sound Engine synchronization
+  useEffect(() => {
+    if (isPlaying) {
+      soundEngine.startPumpHum()
+    } else {
+      soundEngine.stopPumpHum()
+    }
+  }, [isPlaying])
+
+  const prevStatusRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (!isPlaying || !statusMessage || statusMessage === prevStatusRef.current) return
+    prevStatusRef.current = statusMessage
+
+    if (statusMessage.includes('Pinch')) {
+      soundEngine.playPinchClack()
+    } else if (statusMessage.includes('Forming')) {
+      soundEngine.playFormingTone()
+    } else if (statusMessage.includes('Open')) {
+      soundEngine.playDecompressHiss()
+    }
+  }, [isPlaying, statusMessage])
 
   const currentStep = sequence?.steps[activeStepIndex]
 
@@ -157,6 +191,17 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
             <span>DELEM Program Table</span>
             {showDelemTable ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
+
+          {onOpenSetupSheet && (
+            <button
+              onClick={onOpenSetupSheet}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/80 rounded-lg font-semibold transition shadow-sm"
+              title="Open Shop-Floor Setup Sheet & Test Report"
+            >
+              <FileText className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Setup Sheet & Report</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -189,6 +234,7 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
           <div className="flex-1 h-full relative">
             <Viewport3D
               part={part}
+              material={material}
               punch={punch}
               die={die}
               envelope={envelope}
@@ -285,6 +331,23 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
             className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 transition"
           >
             <SkipForward className="w-4 h-4" />
+          </button>
+
+          {/* Machine Audio Sound FX Toggle */}
+          <button
+            onClick={() => {
+              const next = !isMuted
+              setIsMuted(next)
+              soundEngine.setMuted(next)
+            }}
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+            title={isMuted ? 'Machine Sounds: Muted (Click to Unmute)' : 'Machine Sounds: Active (Click to Mute)'}
+          >
+            {isMuted ? (
+              <VolumeX className="w-4 h-4 text-slate-500" />
+            ) : (
+              <Volume2 className="w-4 h-4 text-cyan-400" />
+            )}
           </button>
 
           {/* Speed Selector */}
