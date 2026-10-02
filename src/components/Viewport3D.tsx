@@ -19,6 +19,10 @@ interface Viewport3DProps {
   penetrationDepth: number
   gaugeX: number
   gaugeR: number
+  punchYOverride?: number
+  sheetTransform?: { x: number; y: number; rotationX?: number; rotationY?: number }
+  gaugeOverride?: { x: number; r: number }
+  statusMessage?: string
 }
 
 export const Viewport3D: React.FC<Viewport3DProps> = ({
@@ -34,6 +38,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
   penetrationDepth,
   gaugeX,
   gaugeR,
+  punchYOverride,
+  sheetTransform,
+  gaugeOverride,
+  statusMessage,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -204,7 +212,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     const partWidth = part.width || 400
     const toolWidth = Math.max(partWidth + 80, 500)
 
-    // 1. Update Punch Mesh
+    // 1. Update Punch Mesh with smooth stroke & ram opening elevation
     if (punchMeshRef.current) scene.remove(punchMeshRef.current)
     const rawPunchPoly = punch.polygon2D ?? generatePunchPolygon(punch)
     const punchGeo = createExtrusion(rawPunchPoly, toolWidth)
@@ -215,7 +223,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       metalness: 0.8,
     })
     const punchMesh = new THREE.Mesh(punchGeo, punchMat)
-    punchMesh.position.set(0, punch.height / 2 - penetrationDepth * progress, 0)
+    const effectivePunchY =
+      punchYOverride !== undefined ? punchYOverride : -penetrationDepth * progress
+    punchMesh.position.set(0, punch.height / 2 + effectivePunchY, 0)
     punchMesh.castShadow = true
     scene.add(punchMesh)
     punchMeshRef.current = punchMesh
@@ -236,8 +246,10 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     scene.add(dieMesh)
     dieMeshRef.current = dieMesh
 
-    // 3. Update Backgauge Finger Mesh
+    // 3. Update Backgauge Finger Mesh with smooth dynamic positioning
     if (gaugeMeshRef.current) scene.remove(gaugeMeshRef.current)
+    const effectiveGaugeX = gaugeOverride?.x ?? gaugeX
+    const effectiveGaugeR = gaugeOverride?.r ?? gaugeR
     const gaugeGeo = new THREE.BoxGeometry(40, 50, 40)
     const gaugeMat = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
@@ -245,16 +257,23 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       metalness: 0.6,
     })
     const gaugeMesh = new THREE.Mesh(gaugeGeo, gaugeMat)
-    gaugeMesh.position.set(gaugeX + 20, gaugeR + 25, 0)
+    gaugeMesh.position.set(effectiveGaugeX + 20, effectiveGaugeR + 25, 0)
     scene.add(gaugeMesh)
     gaugeMeshRef.current = gaugeMesh
 
-    // 4. Update Sheet Metal Part Segments
+    // 4. Update Sheet Metal Part Segments & Apply Realistic Handling Transform (Withdraw / 180° Turn / Insert)
     const sheetGroup = sheetGroupRef.current
     if (!sheetGroup) return
     while (sheetGroup.children.length > 0) {
       sheetGroup.remove(sheetGroup.children[0])
     }
+
+    const transX = sheetTransform?.x ?? 0
+    const transY = sheetTransform?.y ?? 0
+    const rotX = sheetTransform?.rotationX ?? 0
+    const rotY = sheetTransform?.rotationY ?? 0
+    sheetGroup.position.set(transX, transY, 0)
+    sheetGroup.rotation.set(rotX, rotY, 0)
 
     const kinState = computePartKinematics(
       part,
@@ -298,6 +317,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     penetrationDepth,
     gaugeX,
     gaugeR,
+    punchYOverride,
+    sheetTransform,
+    gaugeOverride,
   ])
 
   return (
@@ -313,9 +335,18 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur border border-slate-800 text-[11px] text-slate-300 px-3 py-1.5 rounded-lg shadow-lg pointer-events-none">
-        <span className="text-cyan-400 font-bold">3D Extrusion View</span> (Orbit: Touch & Drag / Click Drag)
+      <div className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur border border-slate-800 text-[11px] text-slate-300 px-3 py-1.5 rounded-lg shadow-lg pointer-events-none flex items-center space-x-2">
+        <span className="text-cyan-400 font-bold">3D Extrusion View</span>
+        <span className="text-slate-500">•</span>
+        <span className="text-slate-400">Orbit: Drag</span>
       </div>
+
+      {statusMessage && (
+        <div className="absolute bottom-4 left-4 bg-slate-900/90 backdrop-blur border border-cyan-500/40 text-xs text-white px-3.5 py-1.5 rounded-xl shadow-2xl pointer-events-none flex items-center space-x-2">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+          <span className="font-mono text-cyan-200">{statusMessage}</span>
+        </div>
+      )}
     </div>
   )
 }

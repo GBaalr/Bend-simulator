@@ -25,9 +25,11 @@ export function buildMachineObstacles(
   penetrationDepth: number,
   currentStrokeProgress: number,
   gaugeX: number,
-  gaugeR: number
+  gaugeR: number,
+  punchYOverride?: number
 ): MachineObstacles {
-  const currentPunchY = -penetrationDepth * currentStrokeProgress
+  const currentPunchY =
+    punchYOverride !== undefined ? punchYOverride : -penetrationDepth * currentStrokeProgress
 
   // 1. Punch Polygon translated by current stroke
   const rawPunchPoly = punch.polygon2D ?? generatePunchPolygon(punch)

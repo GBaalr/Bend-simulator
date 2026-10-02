@@ -168,8 +168,23 @@ export const SequenceStepView: React.FC<SequenceStepViewProps> = ({
                         <span>Bend {step.bendIndex + 1}</span>
                         <span className="text-cyan-400 font-mono">({step.targetAngle}°)</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono">
-                        Y: {step.ramStrokeY}mm | X: {step.gaugeX}mm | Turn: {step.orientation}
+                      <div className="text-[10px] text-slate-400 font-mono flex items-center space-x-2">
+                        <span>Y: {step.ramStrokeY}mm</span>
+                        <span>•</span>
+                        <span>X: {step.gaugeX}mm</span>
+                        <span>•</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setInspectedStepIdx(idx)
+                            onApplyOrientation(step.orientation === 'FORWARD' ? 'REVERSE' : 'FORWARD')
+                          }}
+                          className="text-amber-400 hover:text-amber-200 bg-amber-950/60 hover:bg-amber-900/80 px-1.5 py-0.5 rounded border border-amber-800/60 transition cursor-pointer flex items-center space-x-1"
+                          title="Click to toggle between FORWARD and REVERSE"
+                        >
+                          <span>{step.orientation}</span>
+                          <span className="text-[8px]">↺</span>
+                        </button>
                       </div>
                     </div>
                   </div>

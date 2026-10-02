@@ -19,6 +19,10 @@ interface Viewport2DProps {
   penetrationDepth: number
   gaugeX: number
   gaugeR: number
+  punchYOverride?: number
+  sheetTransform?: { x: number; y: number; rotationX?: number; rotationY?: number }
+  gaugeOverride?: { x: number; r: number }
+  statusMessage?: string
 }
 
 export const Viewport2D: React.FC<Viewport2DProps> = ({
@@ -34,6 +38,10 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
   penetrationDepth,
   gaugeX,
   gaugeR,
+  punchYOverride,
+  sheetTransform,
+  gaugeOverride,
+  statusMessage,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [scale, setScale] = useState(2.2)
@@ -92,6 +100,9 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
       y: centerY - y * scale, // flip Y so +Y is up
     })
 
+    const effectiveGaugeX = gaugeOverride?.x ?? gaugeX
+    const effectiveGaugeR = gaugeOverride?.r ?? gaugeR
+
     // Compute obstacles & kinematics
     const obstacles = buildMachineObstacles(
       punch,
@@ -100,8 +111,9 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
       part.thickness,
       penetrationDepth,
       progress,
-      gaugeX,
-      gaugeR
+      effectiveGaugeX,
+      effectiveGaugeR,
+      punchYOverride
     )
 
     const kinState = computePartKinematics(
@@ -149,27 +161,41 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     // 4. Draw Backgauge Finger
     drawPolygon(obstacles.gaugePoly, '#78350f', '#f59e0b', 2)
     // Label Backgauge
-    const gaugeScr = toScreen(gaugeX + 15, gaugeR + 15)
+    const gaugeScr = toScreen(effectiveGaugeX + 15, effectiveGaugeR + 15)
     ctx.fillStyle = '#f59e0b'
     ctx.font = '10px monospace'
-    ctx.fillText(`X: ${gaugeX.toFixed(1)} mm`, gaugeScr.x, gaugeScr.y)
+    ctx.fillText(`X: ${effectiveGaugeX.toFixed(1)} mm`, gaugeScr.x, gaugeScr.y)
 
     // 5. Draw Punch (Upper Tool)
     drawPolygon(obstacles.punchPoly, '#0f172a', '#38bdf8', 2)
 
-    // 6. Draw Sheet Metal Part Segments
+    // 6. Draw Sheet Metal Part Segments with Handling Animation Transform
+    const transX = sheetTransform?.x ?? 0
+    const transY = sheetTransform?.y ?? 0
+    const rotX = sheetTransform?.rotationX ?? 0
+    const rotY = sheetTransform?.rotationY ?? 0
+    const cosRotY = Math.cos(rotY)
+    const cosRotX = Math.cos(rotX)
+
+    const transformPt = (pt: { x: number; y: number }) => ({
+      x: pt.x * cosRotY + transX,
+      y: pt.y * cosRotX + transY,
+    })
+
     const collidingFlanges = collisionResult?.collidingFlanges ?? []
 
     kinState.segments.forEach((seg) => {
       const isColliding = collidingFlanges.includes(seg.flangeIndex)
       const fill = isColliding ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.25)'
       const stroke = isColliding ? '#ef4444' : '#38bdf8'
-      drawPolygon(seg.polygon, fill, stroke, isColliding ? 2.5 : 2)
+      const transformedPoly = seg.polygon.map(transformPt)
+      drawPolygon(transformedPoly, fill, stroke, isColliding ? 2.5 : 2)
 
       // Label Flange ID & Length at mid-point
       const midX = (seg.p1.x + seg.p2.x) / 2
       const midY = (seg.p1.y + seg.p2.y) / 2
-      const midScr = toScreen(midX, midY)
+      const midTransformed = transformPt({ x: midX, y: midY })
+      const midScr = toScreen(midTransformed.x, midTransformed.y)
       ctx.fillStyle = isColliding ? '#fca5a5' : '#cbd5e1'
       ctx.font = 'bold 9px monospace'
       ctx.fillText(`F${seg.flangeIndex + 1} (${part.flanges[seg.flangeIndex].length})`, midScr.x - 15, midScr.y - 6)
@@ -330,13 +356,20 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
       )}
 
       {/* Coordinates / Orientation indicator */}
-      <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-400 bg-slate-900/80 backdrop-blur border border-slate-800 px-2 py-1 rounded">
+      <div className="absolute bottom-4 left-4 text-[10px] font-mono text-slate-400 bg-slate-900/80 backdrop-blur border border-slate-800 px-2 py-1 rounded flex items-center space-x-2">
         <span>Orientation: </span>
         <span className="text-cyan-400 font-bold">{orientation}</span>
-        <span className="mx-2">|</span>
+        <span className="text-slate-600">•</span>
         <span>Stroke: </span>
         <span className="text-cyan-400">{(progress * 100).toFixed(0)}%</span>
       </div>
+
+      {statusMessage && (
+        <div className="absolute bottom-4 right-4 bg-slate-900/90 backdrop-blur border border-cyan-500/40 text-xs text-white px-3 py-1.5 rounded-xl shadow-2xl pointer-events-none flex items-center space-x-2">
+          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+          <span className="font-mono text-cyan-200">{statusMessage}</span>
+        </div>
+      )}
     </div>
   )
 }

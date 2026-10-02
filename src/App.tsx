@@ -19,6 +19,12 @@ import { solveBendSequence } from './core/sequenceSolver'
 import { generateDelemProgram } from './core/delemExporter'
 
 import { SAMPLE_PRESETS } from './core/presets'
+import {
+  computeContinuousMotion,
+  getElapsedTimeForStep,
+  MotionState,
+  PHASE_DURATIONS,
+} from './core/motionEngine'
 
 export function App() {
   // Stepped Workflow Mode
@@ -31,13 +37,19 @@ export function App() {
   const [die, setDie] = useState<Die>(STANDARD_DIES[1]) // V12
   const [envelope, setEnvelope] = useState<MachineEnvelope>(DEFAULT_MACHINE_ENVELOPE)
 
-  // Simulation State
+  // Simulation State with Continuous Realistic Multi-Step Animation
   const [activeStepIndex, setActiveStepIndex] = useState(0)
   const [progress, setProgress] = useState(1.0)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0)
+  const [motionState, setMotionState] = useState<MotionState | null>(null)
   const [isDxfModalOpen, setIsDxfModalOpen] = useState(false)
   const [isSolving, setIsSolving] = useState(false)
   const [isMobileConnectOpen, setIsMobileConnectOpen] = useState(false)
+
+  const elapsedMsRef = useRef<number>(0)
+  const lastTimeRef = useRef<number | null>(null)
+  const animRef = useRef<number | null>(null)
 
   // Part Metrics
   const metrics = useMemo(() => {
@@ -57,24 +69,34 @@ export function App() {
     return generateDelemProgram(part, material, activeSequence, punch, die, metrics.flatLength)
   }, [part, material, activeSequence, punch, die, metrics.flatLength])
 
-  // Animation Loop
-  const animRef = useRef<number | null>(null)
+  // Realistic Continuous Multi-Step Animation Loop
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || !activeSequence || activeSequence.steps.length === 0) {
       if (animRef.current) cancelAnimationFrame(animRef.current)
+      lastTimeRef.current = null
       return
     }
 
-    let p = progress
-    const stepAnim = () => {
-      p += 0.015
-      if (p >= 1.0) {
-        p = 1.0
-        setProgress(1.0)
+    lastTimeRef.current = performance.now()
+
+    const stepAnim = (now: number) => {
+      if (!lastTimeRef.current) lastTimeRef.current = now
+      const delta = Math.min(60, now - lastTimeRef.current) * playbackSpeed
+      lastTimeRef.current = now
+
+      elapsedMsRef.current += delta
+
+      const motion = computeContinuousMotion(activeSequence, elapsedMsRef.current, 1.0)
+      setMotionState(motion)
+      setActiveStepIndex(motion.stepIndex)
+      setProgress(motion.bendProgress)
+
+      if (motion.isFinished) {
         setIsPlaying(false)
+        lastTimeRef.current = null
         return
       }
-      setProgress(p)
+
       animRef.current = requestAnimationFrame(stepAnim)
     }
 
@@ -82,7 +104,51 @@ export function App() {
     return () => {
       if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [isPlaying, progress])
+  }, [isPlaying, activeSequence, playbackSpeed])
+
+  const handleSelectStep = (idx: number) => {
+    if (!activeSequence) return
+    setIsPlaying(false)
+    setActiveStepIndex(idx)
+    setProgress(1.0)
+    setMotionState(null)
+    elapsedMsRef.current =
+      getElapsedTimeForStep(activeSequence, idx) + PHASE_DURATIONS.FORMING
+  }
+
+  const handleTogglePlay = () => {
+    if (!activeSequence || activeSequence.steps.length === 0) return
+    if (isPlaying) {
+      setIsPlaying(false)
+      return
+    }
+
+    // If finished or at end, start from beginning
+    const isAtEnd =
+      activeStepIndex === activeSequence.steps.length - 1 && progress >= 0.99
+    if (isAtEnd || motionState?.isFinished) {
+      setActiveStepIndex(0)
+      setProgress(0.0)
+      elapsedMsRef.current = 0
+      setMotionState(null)
+    } else {
+      // Resume from current step progress
+      elapsedMsRef.current =
+        getElapsedTimeForStep(activeSequence, activeStepIndex) +
+        progress * PHASE_DURATIONS.FORMING
+    }
+    setIsPlaying(true)
+  }
+
+  const handleProgressChange = (p: number) => {
+    if (!activeSequence) return
+    setIsPlaying(false)
+    setProgress(p)
+    setMotionState(null)
+    elapsedMsRef.current =
+      getElapsedTimeForStep(activeSequence, activeStepIndex) +
+      p * PHASE_DURATIONS.FORMING
+  }
 
   const handleLoadPreset = (key: string) => {
     if (SAMPLE_PRESETS[key]) {
@@ -90,6 +156,8 @@ export function App() {
       setActiveStepIndex(0)
       setProgress(1.0)
       setIsPlaying(false)
+      setMotionState(null)
+      elapsedMsRef.current = 0
     }
   }
 
@@ -210,19 +278,9 @@ export function App() {
             activeStepIndex={activeStepIndex}
             progress={progress}
             isPlaying={isPlaying}
-            onSelectStep={(idx) => {
-              setActiveStepIndex(idx)
-              setProgress(1.0)
-              setIsPlaying(false)
-            }}
-            onTogglePlay={() => {
-              if (progress >= 0.99) setProgress(0.0)
-              setIsPlaying(!isPlaying)
-            }}
-            onProgressChange={(p) => {
-              setProgress(p)
-              setIsPlaying(false)
-            }}
+            onSelectStep={handleSelectStep}
+            onTogglePlay={handleTogglePlay}
+            onProgressChange={handleProgressChange}
             onToggleOrientation={() => {
               if (activeSequence && activeSequence.steps[activeStepIndex]) {
                 const cur = activeSequence.steps[activeStepIndex].orientation
@@ -233,6 +291,15 @@ export function App() {
             }}
             onPrevStep={() => setCurrentWorkflowStep('SEQUENCE')}
             onBackToSketch={() => setCurrentWorkflowStep('SKETCH')}
+            punchYOverride={motionState?.punchYOverride}
+            sheetTransform={motionState?.sheetTransform}
+            gaugeOverride={motionState?.gaugeOverride}
+            statusMessage={motionState?.statusMessage}
+            completedBendsOverride={motionState?.completedBends}
+            activeBendIndexOverride={motionState?.activeBendIndex}
+            orientationOverride={motionState?.orientation}
+            playbackSpeed={playbackSpeed}
+            onChangePlaybackSpeed={setPlaybackSpeed}
           />
         )}
       </main>

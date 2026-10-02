@@ -37,6 +37,16 @@ interface SimulationStepViewProps {
   onToggleOrientation: () => void
   onPrevStep: () => void
   onBackToSketch: () => void
+  // Continuous Motion & Handling Props
+  punchYOverride?: number
+  sheetTransform?: { x: number; y: number; rotationX?: number; rotationY?: number }
+  gaugeOverride?: { x: number; r: number }
+  statusMessage?: string
+  completedBendsOverride?: Map<number, number>
+  activeBendIndexOverride?: number
+  orientationOverride?: 'FORWARD' | 'REVERSE'
+  playbackSpeed?: number
+  onChangePlaybackSpeed?: (speed: number) => void
 }
 
 export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
@@ -55,6 +65,15 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
   onToggleOrientation,
   onPrevStep,
   onBackToSketch,
+  punchYOverride,
+  sheetTransform,
+  gaugeOverride,
+  statusMessage,
+  completedBendsOverride,
+  activeBendIndexOverride,
+  orientationOverride,
+  playbackSpeed = 1.0,
+  onChangePlaybackSpeed,
 }) => {
   const [viewMode, setViewMode] = useState<'2D' | '3D' | 'SPLIT'>('3D')
   const [showDelemTable, setShowDelemTable] = useState(false)
@@ -63,6 +82,7 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
 
   // Completed bends map
   const completedBends = React.useMemo(() => {
+    if (completedBendsOverride) return completedBendsOverride
     const map = new Map<number, number>()
     if (!sequence) return map
     for (let i = 0; i < activeStepIndex; i++) {
@@ -70,7 +90,7 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
       map.set(step.bendIndex, step.targetAngle)
     }
     return map
-  }, [sequence, activeStepIndex])
+  }, [sequence, activeStepIndex, completedBendsOverride])
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
@@ -89,7 +109,11 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
             Step {activeStepIndex + 1}/{sequence?.steps.length}
           </span>
           <span className="text-slate-400 font-mono shrink-0">
-            (Bend {currentStep?.bendIndex ? currentStep.bendIndex + 1 : 1}, {currentStep?.targetAngle}°)
+            (Bend {(currentStep?.bendIndex ?? 0) + 1}, {currentStep?.targetAngle}°)
+          </span>
+          <span className="hidden md:inline-flex items-center space-x-1.5 text-[11px] font-mono text-cyan-300 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            <span>Continuous Motion Simulator</span>
           </span>
         </div>
 
@@ -145,14 +169,18 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
               punch={punch}
               die={die}
               envelope={envelope}
-              activeBendIndex={currentStep?.bendIndex ?? 0}
+              activeBendIndex={activeBendIndexOverride ?? currentStep?.bendIndex ?? 0}
               completedBends={completedBends}
               progress={progress}
-              orientation={currentStep?.orientation ?? 'FORWARD'}
+              orientation={orientationOverride ?? currentStep?.orientation ?? 'FORWARD'}
               collisionResult={currentStep?.collisionResult ?? null}
               penetrationDepth={currentStep?.ramStrokeY ?? 2.0}
               gaugeX={currentStep?.gaugeX ?? 50}
               gaugeR={currentStep?.gaugeR ?? 0}
+              punchYOverride={punchYOverride}
+              sheetTransform={sheetTransform}
+              gaugeOverride={gaugeOverride}
+              statusMessage={statusMessage}
             />
           </div>
         )}
@@ -164,30 +192,48 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
               punch={punch}
               die={die}
               envelope={envelope}
-              activeBendIndex={currentStep?.bendIndex ?? 0}
+              activeBendIndex={activeBendIndexOverride ?? currentStep?.bendIndex ?? 0}
               completedBends={completedBends}
               progress={progress}
-              orientation={currentStep?.orientation ?? 'FORWARD'}
+              orientation={orientationOverride ?? currentStep?.orientation ?? 'FORWARD'}
               collisionResult={currentStep?.collisionResult ?? null}
               penetrationDepth={currentStep?.ramStrokeY ?? 2.0}
               gaugeX={currentStep?.gaugeX ?? 50}
               gaugeR={currentStep?.gaugeR ?? 0}
+              punchYOverride={punchYOverride}
+              sheetTransform={sheetTransform}
+              gaugeOverride={gaugeOverride}
+              statusMessage={statusMessage}
             />
           </div>
         )}
 
         {/* Floating Operator Handling Instruction Banner */}
         {currentStep && (
-          <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur border border-slate-800 p-2.5 rounded-xl shadow-xl flex items-center space-x-3 pointer-events-none">
-            <div className="w-7 h-7 rounded-lg bg-cyan-950 border border-cyan-800 flex items-center justify-center font-mono font-bold text-cyan-400 text-xs">
+          <div className="absolute top-4 left-4 bg-slate-900/90 backdrop-blur border border-slate-750 p-3 rounded-xl shadow-2xl flex items-center space-x-3 z-20">
+            <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-500/50 flex items-center justify-center font-mono font-bold text-cyan-400 text-xs">
               S{activeStepIndex + 1}
             </div>
             <div className="text-xs">
-              <span className="font-semibold text-white block">
-                Bend {currentStep.bendIndex + 1} ({currentStep.targetAngle}°)
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Orientation: <span className="text-amber-400">{currentStep.orientation}</span>
+              <div className="flex items-center space-x-2">
+                <span className="font-bold text-white block">
+                  Bend {(currentStep.bendIndex ?? 0) + 1} ({currentStep.targetAngle}°)
+                </span>
+                <button
+                  onClick={onToggleOrientation}
+                  title="Click to toggle FORWARD / REVERSE handling orientation"
+                  className="text-[10px] px-2 py-0.5 rounded bg-amber-950/80 hover:bg-amber-900 text-amber-300 hover:text-amber-100 border border-amber-700/60 font-mono transition cursor-pointer active:scale-95 flex items-center space-x-1"
+                >
+                  <span>{currentStep.orientation}</span>
+                  <span className="text-[9px] opacity-70">↺</span>
+                </button>
+              </div>
+              <span className="text-[11px] text-cyan-300 font-mono flex items-center space-x-1.5 mt-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
+                <span>
+                  {statusMessage ||
+                    `Forming Bend ${(currentStep.bendIndex ?? 0) + 1} at ${(progress * 100).toFixed(0)}%`}
+                </span>
               </span>
             </div>
           </div>
@@ -215,8 +261,8 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
           ))}
         </div>
 
-        {/* Center: Play, Next/Prev, Scrub */}
-        <div className="flex items-center space-x-3 w-full sm:w-auto sm:flex-1 max-w-md">
+        {/* Center: Play, Next/Prev, Scrub, Speed */}
+        <div className="flex items-center space-x-3 w-full sm:w-auto sm:flex-1 max-w-lg">
           <button
             onClick={() => onSelectStep(Math.max(0, activeStepIndex - 1))}
             disabled={activeStepIndex <= 0}
@@ -227,7 +273,8 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
 
           <button
             onClick={onTogglePlay}
-            className="w-9 h-9 rounded-full bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center shadow-lg shadow-cyan-600/30 transition"
+            className="w-9 h-9 rounded-full bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center shadow-lg shadow-cyan-600/30 transition shrink-0"
+            title={isPlaying ? 'Pause Simulation' : 'Play Continuous Sequence'}
           >
             {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
           </button>
@@ -239,6 +286,26 @@ export const SimulationStepView: React.FC<SimulationStepViewProps> = ({
           >
             <SkipForward className="w-4 h-4" />
           </button>
+
+          {/* Speed Selector */}
+          {onChangePlaybackSpeed && (
+            <div className="flex items-center space-x-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px] font-mono shrink-0">
+              {[1, 1.5, 2].map((spd) => (
+                <button
+                  key={spd}
+                  onClick={() => onChangePlaybackSpeed(spd)}
+                  className={`px-1.5 py-0.5 rounded transition ${
+                    playbackSpeed === spd
+                      ? 'bg-cyan-600 text-white font-bold'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title={`${spd}x Playback Speed`}
+                >
+                  {spd}x
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Scrubber slider */}
           <div className="flex-1 flex items-center space-x-2">
