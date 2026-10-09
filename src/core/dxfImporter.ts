@@ -42,11 +42,27 @@ export function parseDxfProfile(
           })
         }
       }
+    } else if (entity.type === 'ARC') {
+      const arc = entity as any
+      if (arc.center && typeof arc.radius === 'number') {
+        const startRad = typeof arc.startAngle === 'number' ? arc.startAngle : 0
+        const endRad = typeof arc.endAngle === 'number' ? arc.endAngle : Math.PI
+        rawSegments.push({
+          p1: {
+            x: arc.center.x + arc.radius * Math.cos(startRad),
+            y: arc.center.y + arc.radius * Math.sin(startRad),
+          },
+          p2: {
+            x: arc.center.x + arc.radius * Math.cos(endRad),
+            y: arc.center.y + arc.radius * Math.sin(endRad),
+          },
+        })
+      }
     }
   }
 
   if (rawSegments.length === 0) {
-    throw new Error('No LINE or POLYLINE elements found in the DXF drawing.')
+    throw new Error('No LINE, ARC, or POLYLINE elements found in the DXF drawing.')
   }
 
   // Chain connected segments into an ordered path
@@ -57,20 +73,21 @@ export function parseDxfProfile(
     const lastPt = orderedPoints[orderedPoints.length - 1]
     let foundIdx = -1
     let reversed = false
+    let minGap = 5.0 // Connection tolerance for CAD exports (supports small gaps)
 
     for (let i = 0; i < remaining.length; i++) {
       const seg = remaining[i]
       const distStart = Math.hypot(seg.p1.x - lastPt.x, seg.p1.y - lastPt.y)
       const distEnd = Math.hypot(seg.p2.x - lastPt.x, seg.p2.y - lastPt.y)
 
-      if (distStart < 1.0) {
+      if (distStart < minGap) {
+        minGap = distStart
         foundIdx = i
         reversed = false
-        break
-      } else if (distEnd < 1.0) {
+      } else if (distEnd < minGap) {
+        minGap = distEnd
         foundIdx = i
         reversed = true
-        break
       }
     }
 
@@ -93,7 +110,7 @@ export function parseDxfProfile(
     const len = Math.round(Math.hypot(p2.x - p1.x, p2.y - p1.y) * 10) / 10
     flanges.push({
       id: `flange-${i}`,
-      length: Math.max(10, len),
+      length: Math.max(0.5, len),
     })
 
     if (i < orderedPoints.length - 2) {

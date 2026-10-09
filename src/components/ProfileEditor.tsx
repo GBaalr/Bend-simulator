@@ -20,7 +20,7 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
 }) => {
   const handleFlangeChange = (index: number, newLength: number) => {
     const newFlanges = [...part.flanges]
-    newFlanges[index] = { ...newFlanges[index], length: Math.max(5, newLength) }
+    newFlanges[index] = { ...newFlanges[index], length: Math.max(0.5, newLength) }
     onUpdatePart({ ...part, flanges: newFlanges })
   }
 
@@ -176,11 +176,11 @@ export const ProfileEditor: React.FC<ProfileEditorProps> = ({
                   <div className="flex items-center space-x-1">
                     <input
                       type="number"
-                      step="5"
-                      min="10"
+                      step="0.5"
+                      min="0.5"
                       max="800"
                       value={flange.length}
-                      onChange={(e) => handleFlangeChange(idx, parseFloat(e.target.value) || 10)}
+                      onChange={(e) => handleFlangeChange(idx, parseFloat(e.target.value) || 0.5)}
                       className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-slate-100 text-xs focus:border-cyan-500 focus:outline-none"
                     />
                     <span className="text-slate-400 text-[10px]">mm</span>

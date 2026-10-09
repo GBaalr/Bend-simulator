@@ -111,10 +111,10 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onOpenDxfModal}
           className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg transition"
-          title="Import DXF 2D Profile"
+          title="Import CAD / SolidWorks Profile (DXF / STEP)"
         >
           <FileUp className="w-3.5 h-3.5 text-slate-400" />
-          <span className="hidden sm:inline">Import DXF</span>
+          <span className="hidden sm:inline">Import CAD / SolidWorks</span>
         </button>
 
         {onOpenSetupSheet && (

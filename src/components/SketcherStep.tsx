@@ -147,11 +147,13 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
     let angleRad = Math.atan2(dy, dx)
 
     if (smartSnap) {
-      // Snap length to nearest 5mm
-      length = Math.max(10, Math.round(length / 5) * 5)
+      // Snap length to nearest 5mm (minimum 1mm)
+      length = Math.max(1, Math.round(length / 5) * 5 || 1)
       // Snap angle to 45° increments (PI/4)
       const snapAngleInc = Math.PI / 4
       angleRad = Math.round(angleRad / snapAngleInc) * snapAngleInc
+    } else {
+      length = Math.max(0.5, Math.round(length * 10) / 10)
     }
 
     return {
@@ -174,7 +176,12 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
       const prevPt = profilePoints[vIdx - 1]
       const dx = coords.x - prevPt.x
       const dy = coords.y - prevPt.y
-      const newLen = Math.max(10, Math.round(Math.hypot(dx, dy) / (smartSnap ? 5 : 1)) * (smartSnap ? 5 : 1))
+      const newLen = Math.max(
+        0.5,
+        smartSnap
+          ? Math.round(Math.hypot(dx, dy) / 5) * 5 || 1
+          : Math.round(Math.hypot(dx, dy) * 10) / 10
+      )
 
       const updatedFlanges = [...part.flanges]
       if (updatedFlanges[vIdx - 1]) {
@@ -202,7 +209,7 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
     const lastIdx = profilePoints.length - 1
     const lastPt = profilePoints[lastIdx]
     const snapped = snapCoords(coords.x, coords.y, lastPt)
-    if (snapped.length < 5) return
+    if (snapped.length < 0.5) return
 
     let newBendAngle = 90
     let newBendDirection: 'UP' | 'DOWN' = 'UP'
@@ -229,7 +236,7 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
 
     const newFlange: Flange = {
       id: `flange-${Date.now()}-${part.flanges.length}`,
-      length: Math.max(10, Math.round(snapped.length)),
+      length: Math.max(0.5, Math.round(snapped.length * 10) / 10),
     }
 
     const newBend: Bend = {
@@ -504,11 +511,11 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
               <span className="text-slate-400">Len:</span>
               <input
                 type="number"
-                min="10"
+                min="0.5"
                 max="500"
-                step="5"
+                step="1"
                 value={addLength}
-                onChange={(e) => setAddLength(Math.max(10, parseFloat(e.target.value) || 40))}
+                onChange={(e) => setAddLength(Math.max(0.5, parseFloat(e.target.value) || 10))}
                 className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-cyan-300 font-bold focus:border-cyan-500 focus:outline-none"
               />
               <span className="text-slate-400">mm</span>
@@ -615,12 +622,17 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
                     <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="number"
-                        min="5"
+                        min="0.1"
                         max="1000"
+                        step="0.5"
                         value={flange.length}
                         onChange={(e) => {
                           const updated = [...part.flanges]
-                          updated[idx].length = Math.max(5, parseFloat(e.target.value) || 5)
+                          const val = parseFloat(e.target.value)
+                          updated[idx] = {
+                            ...updated[idx],
+                            length: !isNaN(val) && val > 0 ? Math.round(val * 10) / 10 : 0.5,
+                          }
                           onUpdatePart({ ...part, flanges: updated })
                         }}
                         className="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-right font-mono text-xs focus:border-cyan-500 focus:outline-none text-slate-100"
@@ -937,9 +949,9 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
                     <div className="flex items-center justify-center w-full h-full">
                       <input
                         type="number"
-                        min="5"
+                        min="0.1"
                         max="2000"
-                        step="1"
+                        step="0.5"
                         value={flange.length}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -948,7 +960,7 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
                         }}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value)
-                          if (!isNaN(val) && val >= 5) {
+                          if (!isNaN(val) && val > 0) {
                             const updated = [...part.flanges]
                             updated[idx] = { ...flange, length: Math.round(val * 10) / 10 }
                             onUpdatePart({ ...part, flanges: updated })
@@ -1137,11 +1149,11 @@ export const SketcherStep: React.FC<SketcherStepProps> = ({
                     <span className="text-[7.5px] text-cyan-400 font-bold select-none">+</span>
                     <input
                       type="number"
-                      min="5"
+                      min="0.5"
                       max="500"
-                      step="5"
+                      step="1"
                       value={addLength}
-                      onChange={(e) => setAddLength(Math.max(5, parseFloat(e.target.value) || 10))}
+                      onChange={(e) => setAddLength(Math.max(0.5, parseFloat(e.target.value) || 10))}
                       className="w-5 bg-transparent text-cyan-200 text-center font-mono font-bold text-[8px] outline-none cursor-text"
                     />
                   </div>
