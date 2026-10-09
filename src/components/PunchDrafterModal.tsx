@@ -44,10 +44,17 @@ export const PunchDrafterModal: React.FC<PunchDrafterModalProps> = ({
 
   // Generate parametric polygon based on current slider values
   const parametricPoints = useMemo<Point2D[]>(() => {
+    let pType: Punch['type'] = 'straight'
+    if (hasThroatRelief) {
+      pType = throatRelief > 65 ? 'deep_gooseneck' : 'gooseneck'
+    } else if (angle <= 35) {
+      pType = 'acute'
+    }
+
     const tempPunch: Punch = {
       id: 'preview',
       name,
-      type: hasThroatRelief ? 'gooseneck' : 'straight',
+      type: pType,
       height,
       angle,
       tipRadius,
@@ -118,10 +125,17 @@ export const PunchDrafterModal: React.FC<PunchDrafterModalProps> = ({
 
   const handleSave = () => {
     const newId = `punch_custom_${Date.now()}`
+    let pType: Punch['type'] = 'straight'
+    if (hasThroatRelief) {
+      pType = throatRelief > 65 ? 'deep_gooseneck' : 'gooseneck'
+    } else if (angle <= 35) {
+      pType = 'acute'
+    }
+
     const finalPunch: Punch = {
       id: newId,
       name: name || 'Custom Drawn Punch',
-      type: hasThroatRelief ? 'gooseneck' : 'straight',
+      type: pType,
       height,
       angle,
       tipRadius,

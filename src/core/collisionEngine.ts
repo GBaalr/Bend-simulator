@@ -35,23 +35,24 @@ export function buildMachineObstacles(
   const rawPunchPoly = punch.polygon2D ?? generatePunchPolygon(punch)
   const punchPoly = rawPunchPoly.map((pt) => translatePoint(pt, 0, currentPunchY))
 
-  // 2. Punch Holder / Clamp (sits right above punch)
-  // Clamp rail grips the 20mm punch tang and overlaps the top shoulder of the punch
-  const holderBottom = currentPunchY + punch.height - 25
-  const holderTop = currentPunchY + punch.height + 75
-  const holderW = 100 // realistic clamp plate width
+  // 2. Punch Holder / Clamp (Intermediate Quick-Clamp Adapter)
+  // Standard Promecam intermediate clamping blocks (Height: 120mm, Width: 100mm)
+  const clampHeight = envelope.clampHolderHeight || 120
+  const clampWidth = envelope.clampHolderWidth || 100
+  const holderBottom = currentPunchY + punch.height - 20
+  const holderTop = holderBottom + clampHeight
   const holderPoly: Point2D[] = [
-    { x: -holderW / 2, y: holderBottom },
-    { x: holderW / 2, y: holderBottom },
-    { x: holderW / 2, y: holderTop },
-    { x: -holderW / 2, y: holderTop },
+    { x: -clampWidth / 2, y: holderBottom },
+    { x: clampWidth / 2, y: holderBottom },
+    { x: clampWidth / 2, y: holderTop },
+    { x: -clampWidth / 2, y: holderTop },
   ]
 
   // 3. Upper Ram Beam
-  // Deep steel moving beam plate extending 800mm upwards and through full throat depth
-  const ramTop = holderTop + 800
+  // Deep steel moving beam plate extending 600mm upwards and through full throat depth
+  const ramTop = holderTop + 600
   const ramBottom = holderTop
-  const ramFrontX = -160
+  const ramFrontX = -Math.max(160, envelope.ramWidth || 160)
   const ramRearX = Math.max(300, envelope.throatDepth || 350)
   const ramPoly: Point2D[] = [
     { x: ramFrontX, y: ramBottom },
@@ -64,10 +65,12 @@ export function buildMachineObstacles(
   const rawDiePoly = die.polygon2D ?? generateDiePolygon(die, sheetThickness)
   const diePoly = rawDiePoly
 
-  // 5. Lower Bed (Stationary below die)
+  // 5. Lower Bed & Die Rail Holder (Stationary below die)
+  // Sits below the die and die rail table down towards the machine foundation
+  const dieRailH = envelope.dieRailHeight || 55
   const dieBottom = -sheetThickness - die.height
-  const bedBottom = dieBottom - 250
-  const bedW = envelope.bedWidth
+  const bedBottom = dieBottom - (dieRailH + 280)
+  const bedW = envelope.bedWidth || 160
   const bedPoly: Point2D[] = [
     { x: -bedW / 2, y: bedBottom },
     { x: bedW / 2, y: bedBottom },
@@ -75,18 +78,24 @@ export function buildMachineObstacles(
     { x: -bedW / 2, y: dieBottom },
   ]
 
-  // 6. Backgauge Finger at (gaugeX, gaugeR) with CNC X-retract
-  // On real CNC press brakes, the backgauge automatically retracts 30-50mm in +X
-  // once the sheet is pinched, to avoid colliding with the upward-swinging flange.
+  // 6. Backgauge Finger at (gaugeX, gaugeR) with CNC X-retract and authentic 3-tier stop steps
+  // Real CNC press brakes retract 30-50mm in +X once sheet is pinched.
+  // Stepped fingers allow staged bending and return-flange clearance.
   const retractX = Math.min(50, currentStrokeProgress * 80)
   const effectiveGaugeX = gaugeX + retractX
   const fW = 35
-  const fH = 40
+  const fH = 45
+  const step1 = envelope.step1Drop || 15
+  const step2 = envelope.step2Drop || 40
   const gaugePoly: Point2D[] = [
     { x: effectiveGaugeX, y: gaugeR - 5 },
-    { x: effectiveGaugeX + fW, y: gaugeR - 5 },
-    { x: effectiveGaugeX + fW, y: gaugeR + fH },
-    { x: effectiveGaugeX, y: gaugeR + fH },
+    { x: effectiveGaugeX + 15, y: gaugeR - 5 },
+    { x: effectiveGaugeX + 15, y: gaugeR + step1 },
+    { x: effectiveGaugeX + 40, y: gaugeR + step1 },
+    { x: effectiveGaugeX + 40, y: gaugeR + step2 },
+    { x: effectiveGaugeX + fW + 90, y: gaugeR + step2 },
+    { x: effectiveGaugeX + fW + 90, y: gaugeR + fH + 20 },
+    { x: effectiveGaugeX, y: gaugeR + fH + 20 },
   ]
 
   return {

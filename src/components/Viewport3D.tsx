@@ -387,39 +387,53 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     })
 
     // 1. Static Machine Structural Frame (Side Columns, Cylinders, Lower Bed, Backgauge Rail)
+    // 1. Static Machine Structural Frame (Side Columns, Cylinders, Lower Bed, Die Rail Holder)
     const staticGroup = machineStaticGroupRef.current
     if (staticGroup) {
       while (staticGroup.children.length > 0) staticGroup.remove(staticGroup.children[0])
 
+      const dieRailH = envelope.dieRailHeight || 55
+      const dieRailW = envelope.dieRailWidth || 95
       const dieBaseY = -part.thickness - die.height
-      const floorY = -part.thickness - die.height - 45 - 320
+      const floorY = -part.thickness - die.height - dieRailH - 320
 
-      // Die Clamping Rail Base (sits directly under die base)
-      const dieRailGeo = new THREE.BoxGeometry(95, 45, toolWidth + 20)
+      // Lower Die Rail / Table Adapter (Height: 55mm, Width: 95mm with 13mm centering groove)
+      const dieRailGeo = new THREE.BoxGeometry(dieRailW, dieRailH, toolWidth + 20)
       const dieRailMesh = new THREE.Mesh(dieRailGeo, clampBarMat)
-      dieRailMesh.position.set(0, dieBaseY - 22.5, 0)
+      dieRailMesh.position.set(0, dieBaseY - dieRailH / 2, 0)
       dieRailMesh.receiveShadow = true
       dieRailMesh.castShadow = true
       staticGroup.add(dieRailMesh)
 
+      // Die Clamping Side Locking Screws along the rail
+      const screwGeo = new THREE.CylinderGeometry(5, 5, 12, 12)
+      screwGeo.rotateZ(Math.PI / 2)
+      const screwSpacing = 160
+      const numScrews = Math.floor(toolWidth / screwSpacing)
+      for (let i = -numScrews / 2; i <= numScrews / 2; i++) {
+        const screwMesh = new THREE.Mesh(screwGeo, chromePistonMat)
+        screwMesh.position.set(-dieRailW / 2 - 4, dieBaseY - dieRailH / 2, i * screwSpacing)
+        staticGroup.add(screwMesh)
+      }
+
       // Main Lower Bed / Table (under die rail)
-      const bedGeo = new THREE.BoxGeometry(220, 320, toolWidth + 80)
+      const bedGeo = new THREE.BoxGeometry(envelope.bedWidth || 160, 320, toolWidth + 80)
       const bedMesh = new THREE.Mesh(bedGeo, darkMachineMat)
-      bedMesh.position.set(0, dieBaseY - 45 - 160, 0)
+      bedMesh.position.set(0, dieBaseY - dieRailH - 160, 0)
       bedMesh.receiveShadow = true
       bedMesh.castShadow = true
       staticGroup.add(bedMesh)
 
-      // Left and Right C-Frame Upright Columns with authentic 380mm deep throat cutout
+      // Left and Right C-Frame Upright Columns with authentic 350mm deep throat cutout (DELEM DA-53T factory specs)
       const createCFrameMesh = (zPos: number) => {
         const frameShape = new THREE.Shape()
-        const frontX = -200
-        const throatRearX = 380
-        const columnBackX = 660
+        const frontX = -180
+        const throatRearX = envelope.throatDepth || 350
+        const columnBackX = 650
         const bottomY = floorY
         const topY = 560
-        const throatBottomY = -die.height - part.thickness - 20
-        const throatTopY = 380
+        const throatBottomY = -die.height - part.thickness - dieRailH - 10
+        const throatTopY = 360
 
         frameShape.moveTo(frontX, bottomY)
         frameShape.lineTo(columnBackX, bottomY)
@@ -427,7 +441,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         frameShape.lineTo(0, topY)
         frameShape.lineTo(frontX, topY - 140)
         frameShape.lineTo(frontX, throatTopY)
-        // Authentic throat pocket: goes 380mm deep behind bend line!
+        // Authentic C-Frame throat cutout
         frameShape.lineTo(throatRearX, throatTopY)
         frameShape.lineTo(throatRearX, throatBottomY)
         frameShape.lineTo(frontX, throatBottomY)
@@ -487,7 +501,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       staticGroup.add(rBeamMesh)
     }
 
-    // 2. Moving Upper Ram Assembly (Ram Apron Beam, Punch Clamps, Chrome Piston Rods, Punch)
+    // 2. Moving Upper Ram Assembly (Ram Apron Beam, Quick-Clamp Intermediates, Piston Rods, Punch)
     const effectivePunchY =
       punchYOverride !== undefined ? punchYOverride : -penetrationDepth * progress
 
@@ -497,25 +511,52 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       ramGroup.position.set(0, effectivePunchY, 0)
 
+      const clampH = envelope.clampHolderHeight || 120
+      const clampW = envelope.clampHolderWidth || 100
+
       // Main Upper Ram Apron Beam (heavy moving steel plate)
-      const ramBeamGeo = new THREE.BoxGeometry(180, 260, toolWidth + 50)
+      const ramBeamGeo = new THREE.BoxGeometry(envelope.ramWidth || 160, 280, toolWidth + 50)
       const ramBeamMesh = new THREE.Mesh(ramBeamGeo, ramMat)
-      ramBeamMesh.position.set(0, punch.height + 155, 0)
+      ramBeamMesh.position.set(0, punch.height + clampH + 120, 0)
       ramBeamMesh.castShadow = true
       ramGroup.add(ramBeamMesh)
 
-      // Punch Quick-Clamping Rail (grips the standard 20mm European punch tang)
-      const clampRailGeo = new THREE.BoxGeometry(75, 40, toolWidth + 10)
-      const clampRailMesh = new THREE.Mesh(clampRailGeo, clampBarMat)
-      clampRailMesh.position.set(0, punch.height - 5, 0)
-      clampRailMesh.castShadow = true
-      ramGroup.add(clampRailMesh)
+      // Promecam European Intermediate Quick-Clamp Holders
+      // Height 120mm, Width 100mm, gripping the 20mm punch tang
+      const clampHolderGeo = new THREE.BoxGeometry(clampW, clampH, toolWidth + 10)
+      const clampHolderMesh = new THREE.Mesh(clampHolderGeo, clampBarMat)
+      clampHolderMesh.position.set(0, punch.height + clampH / 2 - 20, 0)
+      clampHolderMesh.castShadow = true
+      ramGroup.add(clampHolderMesh)
+
+      // Fast-clamping levers and crowning wedge adjustment indicators spaced along the ram
+      const leverGeo = new THREE.BoxGeometry(12, 45, 16)
+      const leverMat = new THREE.MeshStandardMaterial({
+        color: 0x0284c7, // Distinctive blue quick-clamp lever
+        roughness: 0.3,
+        metalness: 0.7,
+      })
+      const clampSpacing = 150
+      const numClamps = Math.floor(toolWidth / clampSpacing)
+      for (let i = -numClamps / 2; i <= numClamps / 2; i++) {
+        const leverMesh = new THREE.Mesh(leverGeo, leverMat)
+        leverMesh.position.set(-clampW / 2 - 4, punch.height + 25, i * clampSpacing)
+        leverMesh.rotation.z = 0.2
+        ramGroup.add(leverMesh)
+
+        // Wedge adjustment access socket
+        const socketGeo = new THREE.CylinderGeometry(6, 6, 8, 16)
+        socketGeo.rotateZ(Math.PI / 2)
+        const socketMesh = new THREE.Mesh(socketGeo, chromePistonMat)
+        socketMesh.position.set(-clampW / 2 - 2, punch.height + 65, i * clampSpacing)
+        ramGroup.add(socketMesh)
+      }
 
       // Chrome Hydraulic Piston Rods (Extend down from cylinders into moving ram)
       const createPistonRod = (zPos: number) => {
         const rodGeo = new THREE.CylinderGeometry(22, 22, 260, 24)
         const rodMesh = new THREE.Mesh(rodGeo, chromePistonMat)
-        rodMesh.position.set(0, punch.height + 270, zPos)
+        rodMesh.position.set(0, punch.height + clampH + 250, zPos)
         rodMesh.castShadow = true
         return rodMesh
       }
@@ -575,7 +616,7 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
     scene.add(dieMesh)
     dieMeshRef.current = dieMesh
 
-    // 4. Backgauge Finger Mechanism (Dynamic positioning along X and R axes)
+    // 4. Backgauge Finger Mechanism (Dynamic positioning along X and R axes with 3-tier stop fingers)
     const gaugeGroup = gaugeGroupRef.current
     if (gaugeGroup) {
       while (gaugeGroup.children.length > 0) gaugeGroup.remove(gaugeGroup.children[0])
@@ -586,9 +627,9 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
       // Dual Backgauge Stops (Left & Right finger carriers)
       const fingerSpacingZ = Math.min(toolWidth * 0.45, 180)
       const fingerMat = new THREE.MeshStandardMaterial({
-        color: 0xf59e0b,
-        roughness: 0.35,
-        metalness: 0.75,
+        color: 0xf59e0b, // Hardened tool-steel stop face
+        roughness: 0.32,
+        metalness: 0.78,
       })
       const carriageMat = new THREE.MeshStandardMaterial({
         color: 0x334155,
@@ -598,25 +639,41 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
 
       const createFinger = (zOffset: number) => {
         const fg = new THREE.Group()
-        // Stop finger tip (Precision contact block)
-        const tipGeo = new THREE.BoxGeometry(35, 45, 30)
-        const tipMesh = new THREE.Mesh(tipGeo, fingerMat)
-        tipMesh.position.set(effectiveGaugeX + 17.5, effectiveGaugeR + 22.5, zOffset)
-        tipMesh.castShadow = true
-        fg.add(tipMesh)
 
-        // Carriage slide arm extending to rear rail
+        // 3-Tier Stepped Stop Finger Profile:
+        // Tier 0: Front face at x = 0 (15mm high)
+        const tier0Geo = new THREE.BoxGeometry(15, 18, 28)
+        const tier0Mesh = new THREE.Mesh(tier0Geo, fingerMat)
+        tier0Mesh.position.set(effectiveGaugeX + 7.5, effectiveGaugeR + 9, zOffset)
+        tier0Mesh.castShadow = true
+        fg.add(tier0Mesh)
+
+        // Tier 1: Step 1 drop at x = 15mm (15mm high drop)
+        const tier1Geo = new THREE.BoxGeometry(25, 32, 28)
+        const tier1Mesh = new THREE.Mesh(tier1Geo, fingerMat)
+        tier1Mesh.position.set(effectiveGaugeX + 27.5, effectiveGaugeR + 16, zOffset)
+        tier1Mesh.castShadow = true
+        fg.add(tier1Mesh)
+
+        // Tier 2: Step 2 drop at x = 40mm (full body block)
+        const tier2Geo = new THREE.BoxGeometry(35, 45, 28)
+        const tier2Mesh = new THREE.Mesh(tier2Geo, fingerMat)
+        tier2Mesh.position.set(effectiveGaugeX + 57.5, effectiveGaugeR + 22.5, zOffset)
+        tier2Mesh.castShadow = true
+        fg.add(tier2Mesh)
+
+        // Carriage slide arm extending to rear ballscrew rail
         const armGeo = new THREE.BoxGeometry(140, 25, 22)
         const armMesh = new THREE.Mesh(armGeo, carriageMat)
-        armMesh.position.set(effectiveGaugeX + 90, effectiveGaugeR + 15, zOffset)
+        armMesh.position.set(effectiveGaugeX + 130, effectiveGaugeR + 15, zOffset)
         armMesh.castShadow = true
         fg.add(armMesh)
 
-        // Micro-adjustment knurled knob
+        // Micro-adjustment knurled brass knob
         const knobGeo = new THREE.CylinderGeometry(8, 8, 16, 16)
         const knobMesh = new THREE.Mesh(knobGeo, fingerMat)
         knobMesh.rotation.z = Math.PI / 2
-        knobMesh.position.set(effectiveGaugeX + 165, effectiveGaugeR + 15, zOffset)
+        knobMesh.position.set(effectiveGaugeX + 205, effectiveGaugeR + 15, zOffset)
         fg.add(knobMesh)
 
         return fg

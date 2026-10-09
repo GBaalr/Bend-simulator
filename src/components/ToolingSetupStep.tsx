@@ -46,10 +46,32 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
   const [isDieDrafterOpen, setIsDieDrafterOpen] = useState(false)
   const [mobileTab, setMobileTab] = useState<'catalog' | 'preview'>('catalog')
 
+  const [punchCategory, setPunchCategory] = useState<'all' | 'straight' | 'gooseneck' | 'acute' | 'hemming'>('all')
+  const [dieCategory, setDieCategory] = useState<'all' | 'single_v' | 'acute_v' | 'special'>('all')
+
   // Shortest flange in the part
   const minPartFlange = Math.min(...part.flanges.map((f) => f.length))
   const isFlangeTooShort = minPartFlange < metrics.minFlangeLength
   const isOverTonnage = metrics.totalTonnage > envelope.maxTonnageTonnes
+
+  // Filtered Punch List
+  const filteredPunches = STANDARD_PUNCHES.filter((p) => {
+    if (punchCategory === 'all') return true
+    if (punchCategory === 'straight') return p.type === 'straight'
+    if (punchCategory === 'gooseneck') return p.type === 'gooseneck' || p.type === 'deep_gooseneck'
+    if (punchCategory === 'acute') return p.type === 'acute' || p.type === 'sash'
+    if (punchCategory === 'hemming') return p.type === 'hemming'
+    return true
+  })
+
+  // Filtered Die List
+  const filteredDies = STANDARD_DIES.filter((d) => {
+    if (dieCategory === 'all') return true
+    if (dieCategory === 'single_v') return d.type === 'single_v' || !d.type
+    if (dieCategory === 'acute_v') return d.type === 'acute_v'
+    if (dieCategory === 'special') return d.type === 'multi_v' || d.type === 'hemming'
+    return true
+  })
 
   return (
     <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-950">
@@ -89,7 +111,7 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
           </span>
           <h2 className="text-base font-bold text-white mt-1.5">Tooling & Machine Fit</h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            Select the punch and V-die. Verify machine tonnage and minimum flange safety limits.
+            Select authentic industrial punches and V-dies. Verify machine tonnage and flange safety limits.
           </p>
         </div>
 
@@ -102,11 +124,36 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
               className="flex items-center space-x-1 px-2 py-0.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-[10px] font-semibold transition"
             >
               <PenTool className="w-3 h-3" />
-              <span>Draw Custom Punch</span>
+              <span>Custom Drafter</span>
             </button>
           </div>
 
-          <div className="space-y-1.5">
+          {/* Punch Category Tabs */}
+          <div className="flex space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800/80 overflow-x-auto text-[10px]">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'straight', label: 'Straight' },
+                { id: 'gooseneck', label: 'Gooseneck' },
+                { id: 'acute', label: 'Acute/Sash' },
+                { id: 'hemming', label: 'Hemming' },
+              ] as const
+            ).map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setPunchCategory(cat.id)}
+                className={`px-2 py-0.5 rounded font-medium whitespace-nowrap transition ${
+                  punchCategory === cat.id
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-0.5">
             {/* If current punch is custom (not in standard list), show it pinned at top */}
             {!STANDARD_PUNCHES.some((sp) => sp.id === punch.id) && (
               <div
@@ -128,7 +175,7 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
               </div>
             )}
 
-            {STANDARD_PUNCHES.map((p) => {
+            {filteredPunches.map((p) => {
               const isSelected = p.id === punch.id
               return (
                 <div
@@ -136,14 +183,22 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
                   onClick={() => onUpdatePunch(p)}
                   className={`p-2.5 rounded-lg border cursor-pointer transition flex items-center justify-between ${
                     isSelected
-                      ? 'bg-cyan-950/60 border-cyan-500 text-white'
+                      ? 'bg-cyan-950/60 border-cyan-500 text-white shadow-sm'
                       : 'bg-slate-950/40 border-slate-800 hover:border-slate-700 text-slate-300'
                   }`}
                 >
-                  <div>
-                    <div className="text-xs font-semibold">{p.name.split(' (')[0]}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      Height: {p.height}mm | {p.angle}° | Relief: {p.throatRelief}mm
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold truncate">{p.name.split(' (')[0]}</span>
+                      {p.catalogCode && (
+                        <span className="text-[9px] bg-slate-800 text-cyan-300 px-1 rounded font-mono shrink-0">
+                          {p.catalogCode.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                      H: {p.height}mm | {p.angle}° | R: {p.tipRadius}mm
+                      {p.throatRelief > 0 ? ` | Relief: ${p.throatRelief}mm` : ''}
                     </div>
                   </div>
                   {isSelected && <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />}
@@ -162,8 +217,32 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
               className="flex items-center space-x-1 px-2 py-0.5 bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800 rounded text-[10px] font-semibold transition"
             >
               <PenTool className="w-3 h-3" />
-              <span>Draw Custom Die</span>
+              <span>Custom Drafter</span>
             </button>
+          </div>
+
+          {/* Die Category Tabs */}
+          <div className="flex space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800/80 overflow-x-auto text-[10px]">
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'single_v', label: 'Standard V (88°)' },
+                { id: 'acute_v', label: 'Acute 30°' },
+                { id: 'special', label: 'Multi-V / Hem' },
+              ] as const
+            ).map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setDieCategory(cat.id)}
+                className={`px-2 py-0.5 rounded font-medium whitespace-nowrap transition ${
+                  dieCategory === cat.id
+                    ? 'bg-cyan-600 text-white font-bold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
 
           {/* If current die is custom (not in standard list), show it pinned at top */}
@@ -187,22 +266,25 @@ export const ToolingSetupStep: React.FC<ToolingSetupStepProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-1.5">
-            {STANDARD_DIES.map((d) => {
+          <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
+            {filteredDies.map((d) => {
               const isSelected = d.id === die.id
               return (
                 <div
                   key={d.id}
                   onClick={() => onUpdateDie(d)}
-                  className={`p-2.5 rounded-lg border cursor-pointer transition flex flex-col justify-between ${
+                  className={`p-2 rounded-lg border cursor-pointer transition flex flex-col justify-between ${
                     isSelected
-                      ? 'bg-cyan-950/60 border-cyan-500 text-white'
+                      ? 'bg-cyan-950/60 border-cyan-500 text-white shadow-sm'
                       : 'bg-slate-950/40 border-slate-800 hover:border-slate-700 text-slate-300'
                   }`}
                 >
-                  <div className="text-xs font-semibold font-mono">V = {d.vOpening} mm</div>
-                  <div className="text-[10px] text-slate-400">
-                    H: {d.height}mm | {d.vAngle}°
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold font-mono">V = {d.vOpening} mm</span>
+                    <span className="text-[9px] text-slate-400 font-mono">{d.vAngle}°</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 truncate">
+                    H: {d.height}mm | Base: {d.baseWidth}mm
                   </div>
                 </div>
               )
