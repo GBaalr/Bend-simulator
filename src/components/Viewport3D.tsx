@@ -19,6 +19,7 @@ import { StepCollisionResult } from '../types/simulation'
 import { computePartKinematics } from '../core/kinematicChain'
 import { generatePunchPolygon, generateDiePolygon } from '../core/toolingCatalog'
 import { calculateSpringback, calculateBendingTonnage } from '../core/mathEngine'
+import { checkInstantCollision } from '../core/collisionEngine'
 
 export type CameraPreset = 'ISOMETRIC' | 'OPERATOR' | 'TOOLING' | 'SIDE_PROFILE' | 'BACKGAUGE'
 
@@ -646,11 +647,30 @@ export const Viewport3D: React.FC<Viewport3DProps> = ({
         penetrationDepth
       )
 
-      const hasCollision = collisionResult?.hasCollision ?? false
-      const collidingFlanges = collisionResult?.collidingFlanges ?? []
+      // Live dynamic collision check at the current animation progress
+      const liveCheck = checkInstantCollision(
+        part,
+        activeBendIndex,
+        completedBends,
+        progress,
+        orientation,
+        punch,
+        die,
+        envelope,
+        penetrationDepth,
+        gaugeOverride?.x ?? gaugeX ?? 50,
+        gaugeOverride?.r ?? gaugeR ?? 0
+      )
+
+      const liveCollidingFlanges = liveCheck.hasCollision
+        ? Array.from(new Set(liveCheck.collisionPoints.map((c) => c.flangeIndex)))
+        : []
+
+      const staticCollidingFlanges = collisionResult?.collidingFlanges ?? []
+      const collidingFlangeSet = new Set([...liveCollidingFlanges, ...staticCollidingFlanges])
 
       kinState.segments.forEach((seg) => {
-        const isColliding = collidingFlanges.includes(seg.flangeIndex)
+        const isColliding = collidingFlangeSet.has(seg.flangeIndex)
         const segGeo = createExtrusion(seg.polygon, partWidth)
         segGeo.translate(0, 0, -partWidth / 2) // Center along Z-axis
 

@@ -4,7 +4,7 @@ import { SheetMetalPart } from '../types/sheetMetal'
 import { Punch, Die, MachineEnvelope } from '../types/tooling'
 import { StepCollisionResult } from '../types/simulation'
 import { computePartKinematics } from '../core/kinematicChain'
-import { buildMachineObstacles } from '../core/collisionEngine'
+import { buildMachineObstacles, checkInstantCollision } from '../core/collisionEngine'
 
 interface Viewport2DProps {
   part: SheetMetalPart
@@ -182,11 +182,28 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
       y: pt.y * cosRotX + transY,
     })
 
-    const collidingFlanges = collisionResult?.collidingFlanges ?? []
+    const liveCheck = checkInstantCollision(
+      part,
+      activeBendIndex,
+      completedBends,
+      progress,
+      orientation,
+      punch,
+      die,
+      envelope,
+      penetrationDepth,
+      effectiveGaugeX,
+      effectiveGaugeR
+    )
+    const liveColliding = liveCheck.hasCollision
+      ? Array.from(new Set(liveCheck.collisionPoints.map((c) => c.flangeIndex)))
+      : []
+    const staticColliding = collisionResult?.collidingFlanges ?? []
+    const collidingFlangeSet = new Set([...liveColliding, ...staticColliding])
 
     kinState.segments.forEach((seg) => {
-      const isColliding = collidingFlanges.includes(seg.flangeIndex)
-      const fill = isColliding ? 'rgba(239, 68, 68, 0.4)' : 'rgba(56, 189, 248, 0.25)'
+      const isColliding = collidingFlangeSet.has(seg.flangeIndex)
+      const fill = isColliding ? 'rgba(239, 68, 68, 0.45)' : 'rgba(56, 189, 248, 0.25)'
       const stroke = isColliding ? '#ef4444' : '#38bdf8'
       const transformedPoly = seg.polygon.map(transformPt)
       drawPolygon(transformedPoly, fill, stroke, isColliding ? 2.5 : 2)
@@ -202,8 +219,14 @@ export const Viewport2D: React.FC<Viewport2DProps> = ({
     })
 
     // 7. Draw Collision Intersections (Red Targets)
-    if (collisionResult && collisionResult.hasCollision) {
-      collisionResult.collisionPoints.forEach((cp) => {
+    const displayCollisionPoints = liveCheck.hasCollision
+      ? liveCheck.collisionPoints
+      : collisionResult?.hasCollision
+      ? collisionResult.collisionPoints
+      : []
+
+    if (displayCollisionPoints.length > 0) {
+      displayCollisionPoints.forEach((cp) => {
         const hitScr = toScreen(cp.x, cp.y)
 
         // Pulsing target circle

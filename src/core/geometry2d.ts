@@ -177,6 +177,51 @@ export function checkPolygonCollision(
 }
 
 /**
+ * Returns all intersection and penetration points between two 2D polygons.
+ */
+export function getAllPolygonIntersections(polyA: Point2D[], polyB: Point2D[]): Point2D[] {
+  if (polyA.length < 3 || polyB.length < 3) return []
+
+  const boxA = getBoundingBox(polyA)
+  const boxB = getBoundingBox(polyB)
+  if (!doBoundingBoxesOverlap(boxA, boxB)) return []
+
+  const hits: Point2D[] = []
+
+  // 1. Edge-edge intersections
+  for (let i = 0; i < polyA.length; i++) {
+    const a1 = polyA[i]
+    const a2 = polyA[(i + 1) % polyA.length]
+
+    for (let j = 0; j < polyB.length; j++) {
+      const b1 = polyB[j]
+      const b2 = polyB[(j + 1) % polyB.length]
+
+      const hit = checkLineIntersection(a1, a2, b1, b2)
+      if (hit) {
+        hits.push(hit)
+      }
+    }
+  }
+
+  // 2. Vertices of polyA inside polyB
+  for (const pt of polyA) {
+    if (isPointInsidePolygon(pt, polyB)) {
+      hits.push(pt)
+    }
+  }
+
+  // 3. Vertices of polyB inside polyA
+  for (const pt of polyB) {
+    if (isPointInsidePolygon(pt, polyA)) {
+      hits.push(pt)
+    }
+  }
+
+  return hits
+}
+
+/**
  * Converts a 2D line segment with thickness T into a 4-point quadrilateral polygon.
  */
 export function segmentToPolygon(p1: Point2D, p2: Point2D, thickness: number): Point2D[] {

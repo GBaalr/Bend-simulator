@@ -1,7 +1,7 @@
 import { Point2D, Punch, Die, MachineEnvelope, BackgaugeFinger } from '../types/tooling'
 import { CollisionEntity, CollisionPoint, StepCollisionResult } from '../types/simulation'
 import { SheetMetalPart } from '../types/sheetMetal'
-import { checkPolygonCollision, translatePoint } from './geometry2d'
+import { checkPolygonCollision, getAllPolygonIntersections, translatePoint } from './geometry2d'
 import { computePartKinematics } from './kinematicChain'
 import { generatePunchPolygon, generateDiePolygon } from './toolingCatalog'
 
@@ -36,9 +36,10 @@ export function buildMachineObstacles(
   const punchPoly = rawPunchPoly.map((pt) => translatePoint(pt, 0, currentPunchY))
 
   // 2. Punch Holder / Clamp (sits right above punch)
-  const holderTop = currentPunchY + punch.height + 60
-  const holderBottom = currentPunchY + punch.height
-  const holderW = 70 // half width 35mm
+  // Clamp rail grips the 20mm punch tang and overlaps the top shoulder of the punch
+  const holderBottom = currentPunchY + punch.height - 25
+  const holderTop = currentPunchY + punch.height + 75
+  const holderW = 100 // realistic clamp plate width
   const holderPoly: Point2D[] = [
     { x: -holderW / 2, y: holderBottom },
     { x: holderW / 2, y: holderBottom },
@@ -47,14 +48,16 @@ export function buildMachineObstacles(
   ]
 
   // 3. Upper Ram Beam
-  const ramTop = holderTop + 250
+  // Deep steel moving beam plate extending 800mm upwards and through full throat depth
+  const ramTop = holderTop + 800
   const ramBottom = holderTop
-  const ramW = envelope.ramWidth
+  const ramFrontX = -160
+  const ramRearX = Math.max(300, envelope.throatDepth || 350)
   const ramPoly: Point2D[] = [
-    { x: -ramW / 2, y: ramBottom },
-    { x: ramW / 2, y: ramBottom },
-    { x: ramW / 2, y: ramTop },
-    { x: -ramW / 2, y: ramTop },
+    { x: ramFrontX, y: ramBottom },
+    { x: ramRearX, y: ramBottom },
+    { x: ramRearX, y: ramTop },
+    { x: ramFrontX, y: ramTop },
   ]
 
   // 4. Die Polygon (Stationary on bed)
@@ -160,14 +163,15 @@ export function checkInstantCollision(
           atAngleProgress: progress,
         })
       } else {
-        const punchHit = checkPolygonCollision(seg.polygon, obstacles.punchPoly)
-        if (punchHit.hasCollision && (punchHit.intersectionPoint?.y ?? 0) > currentPunchY + 12) {
+        const hits = getAllPolygonIntersections(seg.polygon, obstacles.punchPoly)
+        const gougeHit = hits.find((h) => h.y > currentPunchY + 10)
+        if (gougeHit) {
           collisionPoints.push({
-            x: punchHit.intersectionPoint?.x ?? seg.p2.x,
-            y: punchHit.intersectionPoint?.y ?? seg.p2.y,
+            x: gougeHit.x,
+            y: gougeHit.y,
             flangeIndex: seg.flangeIndex,
             entity: 'PUNCH',
-            penetrationDepth: punchHit.penetrationDepth ?? 5,
+            penetrationDepth: 5,
             atAngleProgress: progress,
           })
         }
