@@ -56,21 +56,20 @@ export function generatePunchPolygon(punch: Punch): Point2D[] {
 
   if (punch.type === 'gooseneck') {
     // Standard European Swan-Neck Gooseneck Punch (e.g. Rolleri P.130.88 / P.120.88)
-    // Deep throat clearance pocket on the front (-X) for return flanges and box shapes
+    // Authentic working nose height: 26mm slender taper, then deep front throat pocket (-X)
     const reliefDepth = punch.throatRelief || 55
-    const reliefH = punch.throatHeight || 55
+    const reliefH = Math.max(50, punch.throatHeight || 55)
     const bodyRearWidth = 12.0
+    const noseH = 26.0
 
-    // Nose taper at tip
-    const noseH = 8
     const noseRightW = noseH * Math.tan(halfAngleRad) + tipRadius
     const noseLeftW = noseH * Math.tan(halfAngleRad) + tipRadius
 
     // Rear face (+X towards backgauge): solid structural contour
     const rearPts: Point2D[] = [
       { x: noseRightW, y: noseH },
-      { x: bodyRearWidth - 3, y: 25 },
-      { x: bodyRearWidth, y: 60 },
+      { x: bodyRearWidth - 3, y: 35 },
+      { x: bodyRearWidth, y: 65 },
       { x: bodyRearWidth + 1, y: tangBottomY },
     ]
 
@@ -82,9 +81,9 @@ export function generatePunchPolygon(punch: Punch): Point2D[] {
       { x: -reliefDepth * 0.85, y: reliefH + 14 },
       { x: -reliefDepth, y: reliefH }, // Deepest throat point
       { x: -reliefDepth * 0.95, y: reliefH - 12 },
-      { x: -reliefDepth * 0.70, y: Math.max(noseH + 12, reliefH - 24) }, // Lower curve
-      { x: -reliefDepth * 0.40, y: noseH + 8 },
-      { x: -noseLeftW - 3, y: noseH + 3 },
+      { x: -reliefDepth * 0.70, y: Math.max(noseH + 10, reliefH - 24) }, // Lower curve
+      { x: -reliefDepth * 0.35, y: noseH + 6 },
+      { x: -noseLeftW - 2, y: noseH + 2 },
       { x: -noseLeftW, y: noseH }, // Left nose taper
     ]
 
@@ -99,19 +98,19 @@ export function generatePunchPolygon(punch: Punch): Point2D[] {
 
   if (punch.type === 'deep_gooseneck') {
     // Deep Swan-Neck Punch (e.g. Rolleri P.175.88 / UKB Deep Gooseneck)
-    // 80mm throat relief for deep U-profiles, trays, and returns
+    // 28mm working nose taper, 80mm throat relief for deep U-profiles, trays, and returns
     const reliefDepth = punch.throatRelief || 80
-    const reliefH = punch.throatHeight || 70
+    const reliefH = Math.max(65, punch.throatHeight || 70)
     const bodyRearWidth = 14.0
+    const noseH = 28.0
 
-    const noseH = 9
     const noseRightW = noseH * Math.tan(halfAngleRad) + tipRadius
     const noseLeftW = noseH * Math.tan(halfAngleRad) + tipRadius
 
     const rearPts: Point2D[] = [
       { x: noseRightW, y: noseH },
-      { x: bodyRearWidth - 2, y: 35 },
-      { x: bodyRearWidth, y: 90 },
+      { x: bodyRearWidth - 2, y: 40 },
+      { x: bodyRearWidth, y: 95 },
       { x: bodyRearWidth + 2, y: tangBottomY },
     ]
 
@@ -122,9 +121,9 @@ export function generatePunchPolygon(punch: Punch): Point2D[] {
       { x: -reliefDepth * 0.9, y: reliefH + 18 },
       { x: -reliefDepth, y: reliefH }, // Deepest pocket apex
       { x: -reliefDepth * 0.95, y: reliefH - 18 },
-      { x: -reliefDepth * 0.75, y: Math.max(noseH + 16, reliefH - 35) },
-      { x: -reliefDepth * 0.45, y: noseH + 12 },
-      { x: -noseLeftW - 4, y: noseH + 4 },
+      { x: -reliefDepth * 0.75, y: Math.max(noseH + 14, reliefH - 35) },
+      { x: -reliefDepth * 0.40, y: noseH + 8 },
+      { x: -noseLeftW - 3, y: noseH + 3 },
       { x: -noseLeftW, y: noseH },
     ]
 
@@ -597,7 +596,7 @@ export const DEFAULT_MACHINE_ENVELOPE: MachineEnvelope = {
   ramWidth: 160,
   bedWidth: 160,
   clampHolderHeight: 120, // European Quick-Clamp Intermediate Adapter
-  clampHolderWidth: 100,
+  clampHolderWidth: 60,   // Standard Promecam clamp block front-to-back thickness (mm)
   dieRailHeight: 55,      // Lower Die Rail Table Adapter
   dieRailWidth: 95,
   tableHeightFromFloor: 880,

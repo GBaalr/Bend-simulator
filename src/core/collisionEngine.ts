@@ -36,9 +36,9 @@ export function buildMachineObstacles(
   const punchPoly = rawPunchPoly.map((pt) => translatePoint(pt, 0, currentPunchY))
 
   // 2. Punch Holder / Clamp (Intermediate Quick-Clamp Adapter)
-  // Standard Promecam intermediate clamping blocks (Height: 120mm, Width: 100mm)
+  // Standard Promecam intermediate clamping blocks (Height: 120mm, front-to-back thickness: 60mm)
   const clampHeight = envelope.clampHolderHeight || 120
-  const clampWidth = envelope.clampHolderWidth || 100
+  const clampWidth = envelope.clampHolderWidth || 60
   const holderBottom = currentPunchY + punch.height - 20
   const holderTop = holderBottom + clampHeight
   const holderPoly: Point2D[] = [
@@ -173,7 +173,8 @@ export function checkInstantCollision(
         })
       } else {
         const hits = getAllPolygonIntersections(seg.polygon, obstacles.punchPoly)
-        const gougeHit = hits.find((h) => h.y > currentPunchY + 10)
+        const noseClearanceH = punch.type === 'straight' ? 18 : 28
+        const gougeHit = hits.find((h) => h.y > currentPunchY + noseClearanceH)
         if (gougeHit) {
           collisionPoints.push({
             x: gougeHit.x,
